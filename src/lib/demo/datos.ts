@@ -5,6 +5,7 @@ export type Tablas = Record<string, Row[]>;
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const dia = (hoy: Date, delta: number) => new Date(hoy.getTime() + delta * 864e5).toISOString().slice(0, 10);
+const lunes = (iso: string) => dia(new Date(iso + "T12:00:00Z"), -(dow(iso) - 1));
 const dow = (iso: string) => ((new Date(iso + "T12:00:00Z").getUTCDay() + 6) % 7) + 1; // 1 = lunes
 
 // Aleatoriedad determinista: la demo se ve igual en cada arranque
@@ -140,7 +141,12 @@ export function datosDemo(): Tablas {
     { id: uid(93), titulo: "Pedir cajas para la cosecha de Kent", descripcion: null, tipo: "recordatorio", fecha: dia(hoy, 6), finca_id: uid(1), parcela_id: null, completada: false, asignado_a: null, created_by: DEMO_UID },
     { id: uid(94), titulo: "Poda de formación P4", descripcion: null, tipo: "tarea", fecha: dia(hoy, -10), finca_id: uid(1), parcela_id: uid(24), completada: true, asignado_a: null, created_by: DEMO_UID },
     { id: uid(95), titulo: "Reunión con la cooperativa", descripcion: null, tipo: "tarea", fecha: dia(hoy, 11), finca_id: null, parcela_id: null, completada: false, asignado_a: null, created_by: DEMO_UID },
-  ];
+    { id: uid(96), titulo: "Revisar goteros de la parcela P1", descripcion: null, tipo: "tarea", fecha: null, semana_inicio: lunes(dia(hoy, 0)), finca_id: uid(1), parcela_id: uid(21), completada: false, asignado_a: null, created_by: DEMO_UID },
+    { id: uid(97), titulo: "Limpiar la caseta de herramientas", descripcion: null, tipo: "tarea", fecha: null, semana_inicio: lunes(dia(hoy, 0)), finca_id: uid(2), parcela_id: null, completada: false, asignado_a: null, created_by: DEMO_UID },
+    { id: uid(98), titulo: "Pedir presupuesto de cajas de cartón", descripcion: null, tipo: "recordatorio", fecha: null, semana_inicio: lunes(dia(hoy, 7)), finca_id: uid(1), parcela_id: null, completada: false, asignado_a: null, created_by: DEMO_UID },
+    { id: uid(99), titulo: "Renovar el seguro de la maquinaria", descripcion: null, tipo: "tarea", fecha: null, semana_inicio: null, finca_id: null, parcela_id: null, completada: false, asignado_a: null, created_by: DEMO_UID },
+    { id: uid(100), titulo: "Estudiar plantar aguacate en la parcela P4", descripcion: null, tipo: "tarea", fecha: null, semana_inicio: null, finca_id: uid(1), parcela_id: uid(24), completada: false, asignado_a: null, created_by: DEMO_UID },
+  ].map((t: Row) => ({ semana_inicio: t.fecha ? lunes(t.fecha) : null, ...t }));
   const av = (k: number, tipo: string, titulo: string, mensaje: string, prioridad: string, estado: string, finca: number | null, delta = 0): Row => ({
     id: uid(100 + k), regla_id: null, tipo, titulo, mensaje, prioridad, finca_id: finca ? uid(finca) : null, destinatario_id: DEMO_UID, estado,
     pospuesto_hasta: estado === "pospuesto" ? dia(hoy, 3) + "T08:00:00Z" : null, created_at: new Date(hoy.getTime() + delta * 864e5).toISOString(),

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { lunesDe } from "@/lib/tiempo";
 import { rendimientoKgHora } from "@/lib/informes";
 
 type Db = SupabaseClient;
@@ -112,14 +113,18 @@ export const tools: Anthropic.Tool[] = [
   },
   {
     name: "proponer_tarea",
-    description: "Prepara (NO guarda) una tarea o recordatorio (p. ej. próxima recolección) para confirmación.",
+    description:
+      "Prepara (NO guarda) una tarea o recordatorio para confirmación. Puede tener un día concreto (fecha), " +
+      "estar asignada solo a una semana (semana: cualquier fecha de esa semana) o quedar pendiente sin fecha. " +
+      "No preguntes la fecha si el usuario no la da: sin fecha ni semana queda pendiente y se asigna luego en el calendario.",
     input_schema: {
       type: "object",
       properties: {
-        titulo: { type: "string" }, fecha: { type: "string" }, finca: { type: "string" },
-        parcela: { type: "string" }, tipo: { type: "string" }, descripcion: { type: "string" },
+        titulo: { type: "string" }, fecha: { type: "string", description: "Día concreto YYYY-MM-DD (opcional)" },
+        semana: { type: "string", description: "Cualquier fecha YYYY-MM-DD de la semana deseada, si no hay día fijo (opcional)" },
+        finca: { type: "string" }, parcela: { type: "string" }, tipo: { type: "string" }, descripcion: { type: "string" },
       },
-      required: ["titulo", "fecha"],
+      required: ["titulo"],
     },
   },
 ];
@@ -253,16 +258,17 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         const iso = (d: Date) => d.toISOString().slice(0, 10);
         const desde = new Date(hoy.getTime() - dias * 864e5);
         const hasta = new Date(hoy.getTime() + dias * 864e5);
-        const [avisos, tareas, partes, acciones] = await Promise.all([
+        const [avisos, tareas, sinDia, partes, acciones] = await Promise.all([
           db.from("avisos").select("titulo,prioridad,estado").in("estado", ["pendiente", "pospuesto"]).limit(50),
-          db.from("tareas").select("titulo,fecha,tipo").eq("completada", false).lte("fecha", iso(hasta)).order("fecha").limit(50),
+          db.from("tareas").select("titulo,fecha,semana_inicio,tipo").eq("completada", false).lte("fecha", iso(hasta)).order("fecha").limit(50),
+          db.from("tareas").select("titulo,semana_inicio,tipo").eq("completada", false).is("fecha", null).limit(50),
           db.from("partes_trabajo").select("fecha").gte("fecha", iso(desde)).lte("fecha", iso(hoy)),
           db.from("acciones_pendientes").select("resumen,created_at").eq("estado", "pendiente"),
         ]);
         const conParte = new Set((partes.data ?? []).map((x: any) => x.fecha));
         const sinParte: string[] = [];
         for (let d = new Date(desde); d <= hoy; d = new Date(d.getTime() + 864e5)) if (!conParte.has(iso(d))) sinParte.push(iso(d));
-        return { avisos: avisos.data, tareas: tareas.data, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
+        return { avisos: avisos.data, tareas: tareas.data, tareas_sin_dia: sinDia.data /* semana_inicio nulo = pendiente sin fecha */, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
       }
       case "buscar_documentos": {
         const ref = await resolver(db, input?.finca);
@@ -306,7 +312,8 @@ async function proponer(name: string, i: any, ctx: Ctx) {
   if (esError(ref)) return ref;
   if (name !== "proponer_tarea" && !ref.finca_id) return { error: "Falta la finca. Pregunta al usuario." };
   if ((name === "proponer_cosecha") && !ref.parcela_id) return { error: "Falta la parcela. Pregunta al usuario." };
-  fecha.parse(i.fecha);
+  if (name !== "proponer_tarea" || i.fecha) fecha.parse(i.fecha);
+  if (name === "proponer_tarea" && i.semana) fecha.parse(i.semana);
 
   let tipo: string, payload: Record<string, unknown>, resumen: string;
   const lugar = `${ref.finca ?? "—"}${ref.parcela ? ` · parcela ${ref.parcela}` : ""}`;
@@ -342,11 +349,13 @@ async function proponer(name: string, i: any, ctx: Ctx) {
       (i.proveedor ? `\nProveedor: ${i.proveedor}` : "");
   } else {
     tipo = "crear_tarea";
+    const semana = !i.fecha && i.semana ? lunesDe(i.semana) : null;
     payload = {
-      titulo: i.titulo, fecha: i.fecha, finca_id: ref.finca_id ?? null, parcela_id: ref.parcela_id ?? null,
+      titulo: i.titulo, fecha: i.fecha ?? null, semana_inicio: semana, finca_id: ref.finca_id ?? null, parcela_id: ref.parcela_id ?? null,
       tipo: i.tipo ?? "recordatorio", descripcion: i.descripcion ?? null, origen: "chat",
     };
-    resumen = `Tarea · ${i.fecha}${ref.finca ? ` · ${lugar}` : ""}\n${i.titulo}`;
+    const cuando = i.fecha ? i.fecha : semana ? `semana del ${semana.slice(8)}/${semana.slice(5, 7)}` : "sin fecha (pendiente)";
+    resumen = `Tarea · ${cuando}${ref.finca ? ` · ${lugar}` : ""}\n${i.titulo}`;
   }
 
   const { data, error } = await ctx.db

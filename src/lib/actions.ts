@@ -496,14 +496,41 @@ export async function crearReglasBase(): Promise<Res> {
 // ---------- tareas y objetivos ----------
 export async function crearTarea(fd: FormData): Promise<Res> {
   return run(["/calendario", "/"], async ({ db }) => {
-    const p = z.object({ titulo: z.string().min(1, "Falta el título"), fecha: fechaZ })
-      .parse({ titulo: s(fd, "titulo") ?? "", fecha: s(fd, "fecha") });
+    // La fecha y la semana son opcionales: sin ninguna de las dos, la tarea queda pendiente sin fecha.
+    // Con fecha manda la fecha (la semana se deduce); solo con semana queda asignada a esa semana.
+    const p = z.object({
+      titulo: z.string().min(1, "Falta el título"), fecha: fechaZ.nullable(), semana_inicio: fechaZ.nullable(),
+    }).parse({ titulo: s(fd, "titulo") ?? "", fecha: s(fd, "fecha"), semana_inicio: s(fd, "semana") });
     const { error } = await db.from("tareas").insert({
-      ...p, tipo: s(fd, "tipo") ?? "tarea", descripcion: s(fd, "descripcion"), finca_id: s(fd, "finca_id"),
-      parcela_id: s(fd, "parcela_id"), asignado_a: s(fd, "asignado_a"),
+      ...p, semana_inicio: p.fecha ? null : p.semana_inicio, tipo: s(fd, "tipo") ?? "tarea", descripcion: s(fd, "descripcion"),
+      finca_id: s(fd, "finca_id"), parcela_id: s(fd, "parcela_id"), asignado_a: s(fd, "asignado_a"),
     });
     check(error);
-    return "Tarea creada.";
+    return p.fecha ? "Tarea creada con fecha." : p.semana_inicio ? "Tarea asignada a la semana." : "Tarea creada sin fecha (pendiente).";
+  });
+}
+
+/** Cambia cuándo se hace una tarea: un día concreto, una semana (sin día) o nada (pendiente). */
+export async function asignarTarea(fd: FormData): Promise<Res> {
+  return run(["/calendario", "/avisos", "/"], async ({ db }) => {
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const modo = z.enum(["dia", "semana", "nada"]).parse(s(fd, "modo"));
+    const fecha = modo === "dia" ? fechaZ.parse(s(fd, "fecha")) : null;
+    const semana = modo === "semana" ? fechaZ.parse(s(fd, "semana")) : null;
+    const { data, error } = await db.from("tareas").update({ fecha, semana_inicio: semana }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No tienes permiso para modificar esta tarea." };
+    return modo === "dia" ? "Día fijado." : modo === "semana" ? "Asignada a la semana." : "Tarea pasada a pendientes.";
+  });
+}
+
+export async function eliminarTarea(fd: FormData): Promise<Res> {
+  return run(["/calendario", "/avisos", "/"], async ({ db }) => {
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("tareas").delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No tienes permiso para eliminar esta tarea." };
+    return "Tarea eliminada.";
   });
 }
 

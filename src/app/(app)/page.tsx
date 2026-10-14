@@ -11,7 +11,7 @@ export default async function Inicio() {
   const kgEn = async (desde: string, hasta: string) =>
     (await db.from("cosechas").select("kg").gte("fecha", desde).lte("fecha", hasta)).data?.reduce((a, r) => a + Number(r.kg), 0) ?? 0;
   const hace14 = sumarDias(p.hoy, -13);
-  const [kgHoy, kgSem, kgMes, partesSem, partesMes, avisos, tareas, pendientes, serie, proximas, partesSinTarifa, cosechasSinCampana] = await Promise.all([
+  const [kgHoy, kgSem, kgMes, partesSem, partesMes, avisos, tareas, pendientes, serie, proximas, partesSinTarifa, cosechasSinCampana, tareasSinFecha] = await Promise.all([
     kgEn(p.hoy, p.hoy), kgEn(p.semana.desde, p.semana.hasta), kgEn(p.mes.desde, p.mes.hasta),
     db.from("partes_trabajo").select("horas_totales,coste_total").gte("fecha", p.semana.desde).lte("fecha", p.semana.hasta),
     db.from("partes_trabajo").select("horas_totales,coste_total").gte("fecha", p.mes.desde).lte("fecha", p.mes.hasta),
@@ -22,6 +22,7 @@ export default async function Inicio() {
     db.from("cultivos_parcela").select("cultivo,variedad,fecha_prevista_cosecha,parcelas(codigo,fincas(nombre))").gte("fecha_prevista_cosecha", p.hoy).order("fecha_prevista_cosecha").limit(5),
     db.from("partes_trabajo").select("id", { count: "exact", head: true }).is("coste_total", null).gte("fecha", p.mes.desde),
     db.from("cosechas").select("id", { count: "exact", head: true }).is("campana_id", null).gte("fecha", p.mes.desde),
+    db.from("tareas").select("id", { count: "exact", head: true }).eq("completada", false).is("fecha", null),
   ]);
   const porDia = new Map<string, number>();
   (serie.data ?? []).forEach((r) => porDia.set(r.fecha, (porDia.get(r.fecha) ?? 0) + Number(r.kg)));
@@ -82,6 +83,7 @@ export default async function Inicio() {
         <section className="card">
           <h2 className="mb-2 font-medium">Próximas tareas</h2>
           {tareas.data?.length ? tareas.data.map((t, i) => <p key={i} className="text-sm">• {fecha(t.fecha)} · {t.titulo}</p>) : <p className="text-sm text-stone-500">Nada programado.</p>}
+          {(tareasSinFecha.count ?? 0) > 0 && <Link href="/calendario" className="mt-2 inline-block text-sm text-brand-700">{tareasSinFecha.count} tarea(s) sin día fijo → Calendario</Link>}
         </section>
       </div>
       {(pendientes.count ?? 0) > 0 && (

@@ -34,7 +34,7 @@ Con `NEXT_PUBLIC_DEMO=1` la app no necesita Supabase ni claves: usa datos fictic
 - Fase 1 (hecha): esquema completo, auth, chat con confirmación, dashboard, listados de fincas/partes/cosechas.
 - Fase 1b (hecha): usuarios, formularios de alta/edición, historial de cambios.
 - Fase 2 (hecha): gastos y costes, documentos (subida, lectura con IA, revisión antes de importar, descarga, búsqueda, pendientes de recibir).
-- Fase 3 (hecha): avisos automáticos (cron + correo, sin duplicados, leído/resuelto/pospuesto), calendario, informes con exportación a Excel y PDF, objetivos de producción, voz en el chat. Push móvil: arquitectura preparada (`src/lib/avisos/canales.ts`), sin implementar.
+- Fase 3 (hecha): avisos automáticos (cron + correo, sin duplicados, leído/resuelto/pospuesto), calendario con vistas de mes y semana (tareas con día, asignadas a una semana o pendientes sin fecha), informes con exportación a Excel y PDF, objetivos de producción, voz en el chat. Push móvil: arquitectura preparada (`src/lib/avisos/canales.ts`), sin implementar.
 
 ## Avisos en segundo plano
 `GET /api/cron/avisos` con `Authorization: Bearer $CRON_SECRET` evalúa las reglas y envía los correos (Resend).

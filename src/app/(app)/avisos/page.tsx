@@ -21,7 +21,7 @@ export default async function Avisos({ searchParams }: { searchParams: Promise<{
   const [{ data: avisos }, { data: reglas }, { data: tareas }, perfiles] = await Promise.all([
     qb,
     ctx.puedeGestionar ? ctx.db.from("avisos_reglas").select("*").order("created_at") : Promise.resolve({ data: [] as any[] }),
-    ctx.db.from("tareas").select("id,titulo,fecha,tipo").eq("completada", false).order("fecha").limit(8),
+    ctx.db.from("tareas").select("id,titulo,fecha,semana_inicio,tipo").eq("completada", false).order("fecha").limit(8),
     ctx.esAdmin ? ctx.db.from("profiles").select("id,nombre,rol").eq("activo", true).order("nombre") : Promise.resolve({ data: undefined }),
   ]);
   const ordenados = [...(avisos ?? [])].sort((a: any, b: any) => ORDEN[a.prioridad] - ORDEN[b.prioridad]);
@@ -58,9 +58,11 @@ export default async function Avisos({ searchParams }: { searchParams: Promise<{
           <h2 className="font-medium">Próximas tareas</h2>
           <Link href="/calendario" className="text-sm text-brand-700">Calendario →</Link>
         </div>
-        {tareas?.length ? tareas.map((t) => (
-          <p key={t.id} className={`text-sm ${t.fecha < hoy ? "text-red-600" : ""}`}>• {fecha(t.fecha)} · {t.titulo}{t.fecha < hoy ? " (vencida)" : ""}</p>
-        )) : <p className="text-sm text-stone-500">Sin tareas pendientes.</p>}
+        {tareas?.length ? tareas.map((t) => {
+          const vencida = !!t.fecha && t.fecha < hoy;
+          const cuando = t.fecha ? fecha(t.fecha) : t.semana_inicio ? `Semana del ${t.semana_inicio.slice(8)}/${t.semana_inicio.slice(5, 7)}` : "Sin fecha";
+          return <p key={t.id} className={`text-sm ${vencida ? "text-red-600" : ""}`}>• {cuando} · {t.titulo}{vencida ? " (vencida)" : ""}</p>;
+        }) : <p className="text-sm text-stone-500">Sin tareas pendientes.</p>}
       </section>
 
       {ctx.puedeGestionar && (
