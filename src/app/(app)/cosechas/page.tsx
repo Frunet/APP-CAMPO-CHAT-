@@ -1,57 +1,52 @@
 import Link from "next/link";
 import { cargarContexto } from "@/lib/datos";
-import { CosechaForm } from "@/components/forms";
+import { aQuery, datosCosechas, leerFM } from "@/lib/modulos";
 import { Field } from "@/components/ActionForm";
+import Descargas from "@/components/Descargas";
 import { fecha, num } from "@/lib/format";
 
-export default async function Cosechas({ searchParams }: { searchParams: Promise<{ finca?: string; campana?: string; desde?: string; hasta?: string }> }) {
-  const q = await searchParams;
-  const ctx = await cargarContexto();
-  let qb = ctx.db
-    .from("cosechas")
-    .select("id,fecha,cultivo,variedad,kg,cajas,calidad,destino,fincas(nombre),parcelas(codigo)")
-    .order("fecha", { ascending: false }).limit(200);
-  if (q.finca) qb = qb.eq("finca_id", q.finca);
-  if (q.campana) qb = qb.eq("campana_id", q.campana);
-  if (q.desde) qb = qb.gte("fecha", q.desde);
-  if (q.hasta) qb = qb.lte("fecha", q.hasta);
-  const { data } = await qb;
-  const total = data?.reduce((a, r) => a + Number(r.kg), 0) ?? 0;
+const MOSTRAR = 200;
 
-  const porParcela = new Map<string, number>();
-  data?.forEach((r: any) => porParcela.set(`${r.fincas?.nombre} · ${r.parcelas?.codigo}`, (porParcela.get(`${r.fincas?.nombre} · ${r.parcelas?.codigo}`) ?? 0) + Number(r.kg)));
+export default async function Cosechas({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const f = leerFM(await searchParams);
+  const ctx = await cargarContexto();
+  const d = await datosCosechas(ctx.db, f);
+  const parcelas = ctx.fincas.filter((x) => !f.finca || x.id === f.finca).flatMap((x) => x.parcelas.map((p) => ({ id: p.id, t: `${x.nombre} · ${p.codigo}` })));
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <h1 className="text-xl font-semibold">Cosechas y producción</h1>
 
-      {ctx.puedeRegistrar && (
-        <details className="card" open>
-          <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Registrar cosecha</summary>
-          <div className="mt-3"><CosechaForm ctx={ctx} /></div>
-        </details>
-      )}
+      <Descargas modulo="cosechas" qs={aQuery(f)} n={d.n} mostrados={Math.min(d.n, MOSTRAR)}
+        registroPor="Las cosechas se registran desde el chat («Hemos recolectado 2.450 kg de mango Osteen») o subiendo el albarán o informe en Documentos." />
 
-      <form method="get" className="card grid gap-3 sm:grid-cols-5">
-        <Field label="Finca"><select name="finca" className="input" defaultValue={q.finca ?? ""}><option value="">Todas</option>{ctx.fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Field>
-        <Field label="Campaña"><select name="campana" className="input" defaultValue={q.campana ?? ""}><option value="">Todas</option>{ctx.campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></Field>
-        <Field label="Desde"><input type="date" name="desde" className="input" defaultValue={q.desde ?? ""} /></Field>
-        <Field label="Hasta"><input type="date" name="hasta" className="input" defaultValue={q.hasta ?? ""} /></Field>
+      <form method="get" className="card grid gap-3 sm:grid-cols-6">
+        <Field label="Finca"><select name="finca" className="input" defaultValue={f.finca ?? ""}><option value="">Todas</option>{ctx.fincas.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Field>
+        <Field label="Parcela"><select name="parcela" className="input" defaultValue={f.parcela ?? ""}><option value="">Todas</option>{parcelas.map((p) => <option key={p.id} value={p.id}>{p.t}</option>)}</select></Field>
+        <Field label="Campaña"><select name="campana" className="input" defaultValue={f.campana ?? ""}><option value="">Todas</option>{ctx.campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></Field>
+        <Field label="Desde"><input type="date" name="desde" className="input" defaultValue={f.desde ?? ""} /></Field>
+        <Field label="Hasta"><input type="date" name="hasta" className="input" defaultValue={f.hasta ?? ""} /></Field>
         <div className="flex items-end"><button className="btn w-full">Filtrar</button></div>
       </form>
 
+      {d.error && <p role="alert" className="text-sm text-red-600">No se pudieron cargar los datos: {d.error}</p>}
+
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="card"><div className="text-xs text-stone-500">Total del filtro</div><div className="text-2xl font-semibold">{num(total)} kg</div><div className="text-xs text-stone-400">{data?.length ?? 0} registros</div></div>
+        <div className="card">
+          <div className="text-xs text-stone-500">Total del filtro</div>
+          <div className="text-2xl font-semibold">{num(d.kg)} kg</div>
+          <div className="text-xs text-stone-400">{d.n} registros{d.truncado ? " · límite alcanzado: acota las fechas" : ""}</div>
+        </div>
         <div className="card md:col-span-2">
           <div className="mb-1 text-xs text-stone-500">Por parcela (kg)</div>
-          {[...porParcela].sort((a, b) => b[1] - a[1]).map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 text-sm">
-              <span className="w-40 truncate">{k}</span>
-              <div className="h-2 flex-1 rounded bg-stone-100"><div className="h-2 rounded bg-brand-500" style={{ width: `${total ? (v / total) * 100 : 0}%` }} /></div>
-              <span className="w-28 text-right">{num(v)} ({total ? num((v / total) * 100) : 0} %)</span>
+          {d.porParcela.map((p) => (
+            <div key={p.k} className="flex items-center gap-2 text-sm">
+              <span className="w-40 truncate">{p.k}</span>
+              <div className="h-2 flex-1 rounded bg-stone-100"><div className="h-2 rounded bg-brand-500" style={{ width: `${d.kg ? (p.v / d.kg) * 100 : 0}%` }} /></div>
+              <span className="w-28 text-right">{num(p.v)} ({d.kg ? num((p.v / d.kg) * 100) : 0} %)</span>
             </div>
           ))}
-          {!porParcela.size && <p className="text-sm text-stone-500">Sin datos.</p>}
+          {!d.porParcela.length && <p className="text-sm text-stone-500">Sin datos.</p>}
         </div>
       </div>
 
@@ -59,15 +54,15 @@ export default async function Cosechas({ searchParams }: { searchParams: Promise
         <table className="w-full">
           <thead><tr>{["Fecha", "Finca", "Parcela", "Cultivo", "Variedad", "Kg", "Cajas", "Calidad", "Destino", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-stone-100">
-            {data?.map((r: any) => (
+            {d.filas.slice(0, MOSTRAR).map((r: any) => (
               <tr key={r.id}>
                 <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo}</td>
                 <td className="td">{r.cultivo}</td><td className="td">{r.variedad ?? "—"}</td><td className="td font-medium">{num(r.kg, 2)}</td>
                 <td className="td">{r.cajas ?? "—"}</td><td className="td">{r.calidad ?? "—"}</td><td className="td">{r.destino ?? "—"}</td>
-                <td className="td"><Link className="text-brand-700" href={`/cosechas/${r.id}`}>Ver / corregir</Link></td>
+                <td className="td"><Link className="text-brand-700" href={`/cosechas/${r.id}`}>Detalle</Link></td>
               </tr>
             ))}
-            {!data?.length && <tr><td className="td text-stone-500" colSpan={10}>Sin cosechas para este filtro.</td></tr>}
+            {!d.n && <tr><td className="td text-stone-500" colSpan={10}>Sin cosechas para este filtro.</td></tr>}
           </tbody>
         </table>
       </div>

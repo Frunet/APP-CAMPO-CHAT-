@@ -141,83 +141,6 @@ export async function crearEquipo(fd: FormData): Promise<Res> {
   });
 }
 
-function leerParte(fd: FormData) {
-  const p = z.object({
-    fecha: fechaZ, finca_id: z.string().uuid("Elige la finca"),
-    num: z.number().int("Nº de trabajadores entero").positive("Nº de trabajadores debe ser mayor que 0"),
-    horas: z.number().positive("Las horas deben ser mayores que 0").max(24, "Máximo 24 h por persona"),
-    tarifa: z.number().min(0).nullable(),
-  }).parse({
-    fecha: s(fd, "fecha"), finca_id: s(fd, "finca_id"), num: n(fd, "num_trabajadores") ?? 1,
-    horas: n(fd, "horas_por_trabajador") ?? NaN, tarifa: n(fd, "coste_hora"),
-  });
-  const quien = s(fd, "quien"); // "t:<id>" | "e:<id>"
-  return {
-    fecha: p.fecha, finca_id: p.finca_id, parcela_id: s(fd, "parcela_id"),
-    trabajador_id: quien?.startsWith("t:") ? quien.slice(2) : null,
-    equipo_id: quien?.startsWith("e:") ? quien.slice(2) : null,
-    num_trabajadores: p.num, horas_por_trabajador: p.horas,
-    hora_entrada: s(fd, "hora_entrada"), hora_salida: s(fd, "hora_salida"),
-    tipo_trabajo: s(fd, "tipo_trabajo"), actividad: s(fd, "actividad"),
-    coste_hora: p.tarifa, observaciones: s(fd, "observaciones"),
-  };
-}
-
-export async function guardarParte(fd: FormData): Promise<Res> {
-  return run(["/trabajo", "/"], async ({ db }) => {
-    const row = leerParte(fd);
-    const id = s(fd, "id");
-    if (id) {
-      const { data, error } = await db.from("partes_trabajo").update(row).eq("id", id).select("id");
-      check(error);
-      if (!data?.length) throw { message: "No tienes permiso para esta operación en esa finca." };
-      return "Parte corregido. El cambio queda en el historial.";
-    }
-    const { error } = await db.from("partes_trabajo").insert({ ...row, origen: "manual" });
-    check(error);
-    return "Parte registrado.";
-  });
-}
-
-// ---------- cosechas ----------
-export async function guardarCosecha(fd: FormData): Promise<Res> {
-  return run(["/cosechas", "/"], async ({ db }) => {
-    const p = z.object({
-      fecha: fechaZ, finca_id: z.string().uuid("Elige la finca"), parcela_id: z.string().uuid("Elige la parcela"),
-      cultivo: z.string().min(1, "Falta el cultivo"), kg: z.number().positive("Los kg deben ser mayores que 0"),
-      cajas: z.number().int().min(0).nullable(),
-    }).parse({
-      fecha: s(fd, "fecha"), finca_id: s(fd, "finca_id"), parcela_id: s(fd, "parcela_id"),
-      cultivo: s(fd, "cultivo") ?? "", kg: n(fd, "kg") ?? NaN, cajas: n(fd, "cajas"),
-    });
-    const row = {
-      ...p, variedad: s(fd, "variedad"), campana_id: s(fd, "campana_id"), calibre: s(fd, "calibre"),
-      calidad: s(fd, "calidad"), destino: s(fd, "destino"), equipo_id: s(fd, "equipo_id"), observaciones: s(fd, "observaciones"),
-    };
-    const id = s(fd, "id");
-    if (id) {
-      const { data, error } = await db.from("cosechas").update(row).eq("id", id).select("id");
-      check(error);
-      if (!data?.length) throw { message: "No tienes permiso para esta operación en esa finca." };
-      return "Cosecha corregida. El cambio queda en el historial.";
-    }
-    const { error } = await db.from("cosechas").insert({ ...row, origen: "manual" });
-    check(error);
-    return "Cosecha registrada.";
-  });
-}
-
-export async function eliminarRegistro(fd: FormData): Promise<Res> {
-  return run(["/trabajo", "/cosechas", "/gastos", "/"], async ({ db }) => {
-    const tabla = z.enum(["partes_trabajo", "cosechas", "gastos"]).parse(s(fd, "tabla"));
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const { data, error } = await db.from(tabla).delete().eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "Solo un responsable de la finca o un administrador puede eliminar registros." };
-    return "Registro eliminado (queda constancia en el historial).";
-  });
-}
-
 // ---------- usuarios (solo administrador) ----------
 async function exigirAdmin(db: Awaited<ReturnType<typeof sesion>>["db"]) {
   const { data } = await db.rpc("es_admin");
@@ -276,33 +199,6 @@ export async function actualizarUsuario(fd: FormData): Promise<Res> {
 // ---------- gastos ----------
 const CATEGORIAS = z.enum(["mano_obra", "insumos", "maquinaria", "combustible", "semillas_plantas", "riego_agua", "herramientas", "transporte", "otros"]);
 const TIPOS_IMPORTE = z.enum(["registrado", "presupuesto", "estimacion", "prevision"]);
-
-export async function guardarGasto(fd: FormData): Promise<Res> {
-  return run(["/gastos", "/"], async ({ db }) => {
-    const p = z.object({
-      fecha: fechaZ, finca_id: z.string().uuid("Elige la finca"), categoria: CATEGORIAS,
-      importe: z.number({ invalid_type_error: "Importe no válido" }).min(0, "El importe no puede ser negativo"),
-      moneda: z.string().length(3, "Moneda de 3 letras (EUR)"), tipo_importe: TIPOS_IMPORTE,
-    }).parse({
-      fecha: s(fd, "fecha"), finca_id: s(fd, "finca_id"), categoria: s(fd, "categoria"),
-      importe: n(fd, "importe") ?? NaN, moneda: (s(fd, "moneda") ?? "EUR").toUpperCase(), tipo_importe: s(fd, "tipo_importe") ?? "registrado",
-    });
-    const row = {
-      ...p, parcela_id: s(fd, "parcela_id"), campana_id: s(fd, "campana_id"), proveedor: s(fd, "proveedor"),
-      concepto: s(fd, "concepto"), documento_id: s(fd, "documento_id"), observaciones: s(fd, "observaciones"),
-    };
-    const id = s(fd, "id");
-    if (id) {
-      const { data, error } = await db.from("gastos").update(row).eq("id", id).select("id");
-      check(error);
-      if (!data?.length) throw { message: "No tienes permiso para esta operación en esa finca." };
-      return "Gasto corregido. El cambio queda en el historial.";
-    }
-    const { error } = await db.from("gastos").insert(row);
-    check(error);
-    return "Gasto registrado.";
-  });
-}
 
 // ---------- documentos ----------
 export async function actualizarDocumento(fd: FormData): Promise<Res> {
