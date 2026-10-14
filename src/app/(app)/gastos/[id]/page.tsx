@@ -10,7 +10,7 @@ export default async function DetalleGasto({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const ctx = await cargarContexto();
   const { data } = await ctx.db.from("gastos")
-    .select("*, fincas(nombre), parcelas(codigo), campanas(nombre)").eq("id", id).maybeSingle();
+    .select("*, fincas(nombre), parcelas(codigo), lotes(codigo), campanas(nombre)").eq("id", id).maybeSingle();
   if (!data) notFound();
   const r = data as any;
   const cat = Object.fromEntries(CATEGORIAS), tipo = Object.fromEntries(TIPOS_IMPORTE);
@@ -21,7 +21,7 @@ export default async function DetalleGasto({ params }: { params: Promise<{ id: s
       <h1 className="text-xl font-semibold">Gasto del {fecha(r.fecha)}</h1>
       <div className="card">
         <Ficha datos={[
-          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Categoría", cat[r.categoria] ?? r.categoria], ["Proveedor", r.proveedor],
+          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Lote", r.lotes?.codigo], ["Categoría", cat[r.categoria] ?? r.categoria], ["Proveedor", r.proveedor],
           ["Concepto", r.concepto], ["Importe", `${num(r.importe, 2)} ${r.moneda}`], ["Naturaleza del importe", tipo[r.tipo_importe] ?? r.tipo_importe],
           ["Campaña", r.campanas?.nombre],
           ["Documento justificativo", r.documento_id ? <Link key="d" href={`/documentos/${r.documento_id}`} className="text-brand-700">📎 Ver documento</Link> : "Sin justificar"],

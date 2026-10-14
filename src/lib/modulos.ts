@@ -45,21 +45,22 @@ function filtrar(q: any, f: FM, o: { campana?: boolean; fechaCol?: string } = {}
 export async function datosTrabajo(db: Db, f: FM) {
   const q = filtrar(
     db.from("partes_trabajo")
-      .select("id,fecha,num_trabajadores,horas_por_trabajador,horas_totales,coste_hora,coste_total,tipo_trabajo,actividad,origen,observaciones,fincas(nombre),parcelas(codigo),equipos(nombre),trabajadores(nombre)")
+      .select("id,fecha,num_trabajadores,horas_por_trabajador,horas_totales,coste_hora,coste_total,tipo_trabajo,actividad,origen,observaciones,horas_extra_por_trabajador,horas_extra_totales,festivo,fincas(nombre),parcelas(codigo),lotes(codigo),equipos(nombre),trabajadores(nombre)")
       .order("fecha", { ascending: false }).limit(CAP), f);
   const { data, error } = await q;
   const filas = (data ?? []) as any[];
   const sinTarifa = filas.filter((r) => r.coste_total == null).length;
   const tabla: TablaExport = {
     titulo: "Partes de trabajo",
-    columnas: ["Fecha", "Finca", "Parcela", "Equipo / trabajador", "Personas", "Horas por persona", "Horas totales", "Tipo de trabajo", "Actividad", "Coste/hora", "Coste total", "Origen", "Observaciones"],
-    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.equipos?.nombre ?? r.trabajadores?.nombre ?? "", r.num_trabajadores,
-      Number(r.horas_por_trabajador), Number(r.horas_totales), r.tipo_trabajo ?? "", r.actividad ?? "", r.coste_hora == null ? "" : Number(r.coste_hora),
-      r.coste_total == null ? "sin tarifa" : Number(r.coste_total), r.origen ?? "", r.observaciones ?? ""]),
-    soloExcel: [7, 11, 12],
+    columnas: ["Fecha", "Finca", "Parcela", "Lote", "Equipo / trabajador", "Personas", "Horas por persona", "Horas extra (por persona)", "Horas totales", "Festivo", "Tipo de trabajo", "Actividad", "Coste/hora normal", "Coste total", "Origen", "Observaciones"],
+    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.lotes?.codigo ?? "", r.equipos?.nombre ?? r.trabajadores?.nombre ?? "", r.num_trabajadores,
+      Number(r.horas_por_trabajador), Number(r.horas_extra_por_trabajador ?? 0), Number(r.horas_totales), r.festivo ? "Sí" : "No", r.tipo_trabajo ?? "", r.actividad ?? "",
+      r.coste_hora == null ? "" : Number(r.coste_hora), r.coste_total == null ? "sin tarifa" : Number(r.coste_total), r.origen ?? "", r.observaciones ?? ""]),
+    soloExcel: [10, 12, 14, 15],
   };
   return {
-    filas, error: error?.message, n: filas.length, horas: r2(sum(filas, "horas_totales")), coste: r2(sum(filas, "coste_total")),
+    filas, error: error?.message, n: filas.length, horas: r2(sum(filas, "horas_totales")), horasExtra: r2(sum(filas, "horas_extra_totales")),
+    festivos: filas.filter((r) => r.festivo).length, coste: r2(sum(filas, "coste_total")),
     sinTarifa, truncado: filas.length >= CAP, tabla,
   };
 }
@@ -68,7 +69,7 @@ export async function datosTrabajo(db: Db, f: FM) {
 export async function datosCosechas(db: Db, f: FM) {
   const q = filtrar(
     db.from("cosechas")
-      .select("id,fecha,cultivo,variedad,kg,cajas,calibre,calidad,destino,observaciones,fincas(nombre),parcelas(codigo),campanas(nombre),equipos(nombre)")
+      .select("id,fecha,cultivo,variedad,kg,cajas,calibre,calidad,destino,observaciones,fincas(nombre),parcelas(codigo),lotes(codigo),campanas(nombre),equipos(nombre)")
       .order("fecha", { ascending: false }).limit(CAP), f, { campana: true });
   const { data, error } = await q;
   const filas = (data ?? []) as any[];
@@ -76,10 +77,10 @@ export async function datosCosechas(db: Db, f: FM) {
   filas.forEach((r) => { const k = `${r.fincas?.nombre} · ${r.parcelas?.codigo}`; porParcela.set(k, (porParcela.get(k) ?? 0) + Number(r.kg)); });
   const tabla: TablaExport = {
     titulo: "Cosechas",
-    columnas: ["Fecha", "Finca", "Parcela", "Cultivo", "Variedad", "Campaña", "Kg", "Cajas", "Calibre", "Calidad", "Destino", "Equipo", "Observaciones"],
-    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.cultivo, r.variedad ?? "", r.campanas?.nombre ?? "", Number(r.kg),
+    columnas: ["Fecha", "Finca", "Parcela", "Lote", "Cultivo", "Variedad", "Campaña", "Kg", "Cajas", "Calibre", "Calidad", "Destino", "Equipo", "Observaciones"],
+    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.lotes?.codigo ?? "", r.cultivo, r.variedad ?? "", r.campanas?.nombre ?? "", Number(r.kg),
       r.cajas ?? "", r.calibre ?? "", r.calidad ?? "", r.destino ?? "", r.equipos?.nombre ?? "", r.observaciones ?? ""]),
-    soloExcel: [8, 11, 12],
+    soloExcel: [9, 12, 13],
   };
   return {
     filas, error: error?.message, n: filas.length, kg: r2(sum(filas, "kg")),
@@ -92,7 +93,7 @@ export async function datosCosechas(db: Db, f: FM) {
 export async function datosGastos(db: Db, f: FM) {
   let gq = filtrar(
     db.from("gastos")
-      .select("id,fecha,proveedor,categoria,concepto,importe,moneda,tipo_importe,documento_id,observaciones,fincas(nombre),parcelas(codigo),campanas(nombre)")
+      .select("id,fecha,proveedor,categoria,concepto,importe,moneda,tipo_importe,documento_id,observaciones,fincas(nombre),parcelas(codigo),lotes(codigo),campanas(nombre)")
       .order("fecha", { ascending: false }).limit(CAP), f, { campana: true });
   if (f.categoria) gq = gq.eq("categoria", f.categoria);
   const [{ data, error }, kgRes, labRes] = await Promise.all([
@@ -127,10 +128,10 @@ export async function datosGastos(db: Db, f: FM) {
 
   const tabla: TablaExport = {
     titulo: "Gastos",
-    columnas: ["Fecha", "Finca", "Parcela", "Categoría", "Proveedor", "Concepto", "Importe", "Moneda", "Naturaleza", "Justificante", "Campaña", "Observaciones"],
-    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", nombreCat[r.categoria] ?? r.categoria, r.proveedor ?? "", r.concepto ?? "",
+    columnas: ["Fecha", "Finca", "Parcela", "Lote", "Categoría", "Proveedor", "Concepto", "Importe", "Moneda", "Naturaleza", "Justificante", "Campaña", "Observaciones"],
+    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.lotes?.codigo ?? "", nombreCat[r.categoria] ?? r.categoria, r.proveedor ?? "", r.concepto ?? "",
       Number(r.importe), r.moneda, nombreTipo[r.tipo_importe] ?? r.tipo_importe, r.documento_id ? "Sí" : "No", r.campanas?.nombre ?? "", r.observaciones ?? ""]),
-    soloExcel: [10, 11],
+    soloExcel: [11, 12],
   };
   return {
     filas, error: error?.message, n: filas.length, total, moneda: monedas[0] ?? "EUR", mixta, monedas,

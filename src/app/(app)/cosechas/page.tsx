@@ -52,11 +52,11 @@ export default async function Cosechas({ searchParams }: { searchParams: Promise
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead><tr>{["Fecha", "Finca", "Parcela", "Cultivo", "Variedad", "Kg", "Cajas", "Calidad", "Destino", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+          <thead><tr>{["Fecha", "Finca", "Parcela / lote", "Cultivo", "Variedad", "Kg", "Cajas", "Calidad", "Destino", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-stone-100">
             {d.filas.slice(0, MOSTRAR).map((r: any) => (
               <tr key={r.id}>
-                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo}</td>
+                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo}{r.lotes?.codigo ? ` / ${r.lotes.codigo}` : ""}</td>
                 <td className="td">{r.cultivo}</td><td className="td">{r.variedad ?? "—"}</td><td className="td font-medium">{num(r.kg, 2)}</td>
                 <td className="td">{r.cajas ?? "—"}</td><td className="td">{r.calidad ?? "—"}</td><td className="td">{r.destino ?? "—"}</td>
                 <td className="td"><Link className="text-brand-700" href={`/cosechas/${r.id}`}>Detalle</Link></td>

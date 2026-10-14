@@ -47,31 +47,54 @@ async function run(paths: string[], fn: (c: Awaited<ReturnType<typeof sesion>>) 
 }
 const check = (error: { code?: string; message: string } | null) => { if (error) throw error; };
 
-// ---------- fincas, campañas, parcelas, cultivos ----------
+// ---------- maestros (solo administrador): fincas, campañas, parcelas, lotes, cultivos, personal, festivos ----------
+const RUTAS_MAESTROS = ["/maestros", "/fincas", "/trabajo", "/cosechas", "/gastos", "/"];
+
+function numeroOpcional(fd: FormData, k: string, etiqueta: string, max = 1_000_000) {
+  const v = n(fd, k);
+  if (Number.isNaN(v) || (v != null && (v < 0 || v > max))) throw new z.ZodError([{ code: "custom", path: [], message: `${etiqueta} no válido` }]);
+  return v;
+}
+
 export async function crearFinca(fd: FormData): Promise<Res> {
-  return run(["/fincas"], async ({ db }) => {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
     const p = z.object({
       codigo: z.string().min(1, "Falta el código"), nombre: z.string().min(1, "Falta el nombre"),
       tipo: z.enum(["propia", "arrendada", "terceros"]),
-      sup: z.number().min(0, "Superficie no válida").nullable(),
-    }).parse({ codigo: s(fd, "codigo") ?? "", nombre: s(fd, "nombre") ?? "", tipo: s(fd, "tipo_explotacion") ?? "propia", sup: n(fd, "superficie_ha") });
+    }).parse({ codigo: s(fd, "codigo") ?? "", nombre: s(fd, "nombre") ?? "", tipo: s(fd, "tipo_explotacion") ?? "propia" });
     const { error } = await db.from("fincas").insert({
-      codigo: p.codigo, nombre: p.nombre, tipo_explotacion: p.tipo, superficie_ha: p.sup,
+      codigo: p.codigo, nombre: p.nombre, tipo_explotacion: p.tipo, superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"),
       ubicacion: s(fd, "ubicacion"), observaciones: s(fd, "observaciones"),
     });
     check(error);
-    return "Finca creada. Asígnala a los usuarios desde «Usuarios».";
+    return "Finca creada. Asígnala a los usuarios en «Usuarios».";
+  });
+}
+
+export async function actualizarFinca(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const nombre = z.string().min(1, "Falta el nombre").parse(s(fd, "nombre") ?? "");
+    const { data, error } = await db.from("fincas").update({
+      nombre, ubicacion: s(fd, "ubicacion"), superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"),
+      tipo_explotacion: z.enum(["propia", "arrendada", "terceros"]).parse(s(fd, "tipo_explotacion") ?? "propia"),
+      observaciones: s(fd, "observaciones"), activa: fd.get("activa") === "on",
+    }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar la finca." };
+    return "Finca actualizada.";
   });
 }
 
 export async function crearParcela(fd: FormData): Promise<Res> {
-  return run(["/fincas"], async ({ db }) => {
-    const p = z.object({
-      finca_id: z.string().uuid("Elige la finca"), codigo: z.string().min(1, "Falta el código"),
-      sup: z.number().min(0, "Superficie no válida").nullable(),
-    }).parse({ finca_id: s(fd, "finca_id"), codigo: s(fd, "codigo") ?? "", sup: n(fd, "superficie_ha") });
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ finca_id: z.string().uuid("Elige la finca"), codigo: z.string().min(1, "Falta el código") })
+      .parse({ finca_id: s(fd, "finca_id"), codigo: s(fd, "codigo") ?? "" });
     const { error } = await db.from("parcelas").insert({
-      finca_id: p.finca_id, codigo: p.codigo, nombre: s(fd, "nombre"), superficie_ha: p.sup,
+      ...p, nombre: s(fd, "nombre"), superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"),
       estado: s(fd, "estado") ?? "activa", observaciones: s(fd, "observaciones"),
     });
     check(error);
@@ -80,34 +103,49 @@ export async function crearParcela(fd: FormData): Promise<Res> {
 }
 
 export async function actualizarParcela(fd: FormData): Promise<Res> {
-  return run(["/fincas"], async ({ db }) => {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
     const id = z.string().uuid().parse(s(fd, "id"));
-    const sup = n(fd, "superficie_ha");
-    if (Number.isNaN(sup) || (sup != null && sup < 0)) throw new z.ZodError([{ code: "custom", path: [], message: "Superficie no válida" }]);
     const { data, error } = await db.from("parcelas")
-      .update({ nombre: s(fd, "nombre"), superficie_ha: sup, estado: s(fd, "estado") ?? "activa", observaciones: s(fd, "observaciones") })
+      .update({ nombre: s(fd, "nombre"), superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"), estado: s(fd, "estado") ?? "activa", observaciones: s(fd, "observaciones") })
       .eq("id", id).select("id");
     check(error);
-    if (!data?.length) throw { message: "No tienes permiso para esta operación en esa finca." };
+    if (!data?.length) throw { message: "No se pudo actualizar la parcela." };
     return "Parcela actualizada.";
   });
 }
 
-export async function crearCultivo(fd: FormData): Promise<Res> {
-  return run(["/fincas"], async ({ db }) => {
-    const p = z.object({ parcela_id: z.string().uuid("Elige la parcela"), cultivo: z.string().min(1, "Falta el cultivo") })
-      .parse({ parcela_id: s(fd, "parcela_id"), cultivo: s(fd, "cultivo") ?? "" });
-    const { error } = await db.from("cultivos_parcela").insert({
-      ...p, variedad: s(fd, "variedad"), campana_id: s(fd, "campana_id"),
-      fecha_plantacion: s(fd, "fecha_plantacion"), fecha_prevista_cosecha: s(fd, "fecha_prevista_cosecha"),
+// Lotes: subdivisión OPCIONAL de la parcela (finca → parcela → lote)
+export async function crearLote(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ parcela_id: z.string().uuid("Elige la parcela"), codigo: z.string().min(1, "Falta el código del lote") })
+      .parse({ parcela_id: s(fd, "parcela_id"), codigo: s(fd, "codigo") ?? "" });
+    const { error } = await db.from("lotes").insert({
+      ...p, nombre: s(fd, "nombre"), superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"),
+      estado: s(fd, "estado") ?? "activa", observaciones: s(fd, "observaciones"),
     });
     check(error);
-    return "Cultivo añadido.";
+    return "Lote creado.";
+  });
+}
+
+export async function actualizarLote(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("lotes")
+      .update({ nombre: s(fd, "nombre"), superficie_ha: numeroOpcional(fd, "superficie_ha", "La superficie"), estado: s(fd, "estado") ?? "activa", observaciones: s(fd, "observaciones") })
+      .eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar el lote." };
+    return "Lote actualizado.";
   });
 }
 
 export async function crearCampana(fd: FormData): Promise<Res> {
-  return run(["/fincas"], async ({ db }) => {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
     const p = z.object({ nombre: z.string().min(1, "Falta el nombre"), fecha_inicio: fechaZ })
       .parse({ nombre: s(fd, "nombre") ?? "", fecha_inicio: s(fd, "fecha_inicio") });
     const { error } = await db.from("campanas").insert({ ...p, fecha_fin: s(fd, "fecha_fin") });
@@ -116,28 +154,116 @@ export async function crearCampana(fd: FormData): Promise<Res> {
   });
 }
 
-// ---------- mano de obra ----------
+// Catálogo de cultivos y variedades
+export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const cultivo = z.string().min(1, "Falta el cultivo").parse(s(fd, "cultivo") ?? "");
+    const { error } = await db.from("cultivos_maestro").insert({ cultivo, variedad: s(fd, "variedad") });
+    check(error);
+    return "Añadido al catálogo.";
+  });
+}
+
+export async function alternarCultivoMaestro(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("cultivos_maestro").update({ activo: fd.get("activo") === "true" }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar." };
+    return "Catálogo actualizado.";
+  });
+}
+
+// Qué se cultiva en cada parcela (y, si procede, en cada lote)
+export async function crearCultivo(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ parcela_id: z.string().uuid("Elige la parcela"), cultivo: z.string().min(1, "Falta el cultivo") })
+      .parse({ parcela_id: s(fd, "parcela_id"), cultivo: s(fd, "cultivo") ?? "" });
+    const { error } = await db.from("cultivos_parcela").insert({
+      ...p, lote_id: s(fd, "lote_id"), variedad: s(fd, "variedad"), campana_id: s(fd, "campana_id"),
+      fecha_plantacion: s(fd, "fecha_plantacion"), fecha_prevista_cosecha: s(fd, "fecha_prevista_cosecha"),
+    });
+    check(error);
+    return "Cultivo asignado.";
+  });
+}
+
+// Personal: tarifas normal / extra / festivo. Las condiciones propias de un trabajador se aplican a sus partes individuales;
+// las cuadrillas usan las de su equipo.
+function datosPersonal(fd: FormData) {
+  return {
+    nombre: z.string().min(1, "Falta el nombre").parse(s(fd, "nombre") ?? ""),
+    coste_hora: numeroOpcional(fd, "coste_hora", "La tarifa normal", 10_000),
+    coste_hora_extra: numeroOpcional(fd, "coste_hora_extra", "La tarifa de horas extra", 10_000),
+    coste_hora_festivo: numeroOpcional(fd, "coste_hora_festivo", "La tarifa festiva", 10_000),
+    condiciones: s(fd, "condiciones"),
+  };
+}
+
 export async function crearTrabajador(fd: FormData): Promise<Res> {
-  return run(["/trabajo"], async ({ db }) => {
-    const p = z.object({ nombre: z.string().min(1, "Falta el nombre"), finca_id: z.string().uuid("Elige la finca") })
-      .parse({ nombre: s(fd, "nombre") ?? "", finca_id: s(fd, "finca_id") });
-    const tarifa = n(fd, "coste_hora");
-    if (Number.isNaN(tarifa)) throw new z.ZodError([{ code: "custom", path: [], message: "Tarifa no válida" }]);
-    const { error } = await db.from("trabajadores").insert({ ...p, coste_hora: tarifa });
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
+    const { error } = await db.from("trabajadores").insert({ ...datosPersonal(fd), finca_id });
     check(error);
     return "Trabajador creado.";
   });
 }
 
+export async function actualizarTrabajador(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("trabajadores").update({ ...datosPersonal(fd), activo: fd.get("activo") === "on" }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar el trabajador." };
+    return "Trabajador actualizado. Los partes ya registrados conservan la tarifa con la que se calcularon.";
+  });
+}
+
 export async function crearEquipo(fd: FormData): Promise<Res> {
-  return run(["/trabajo"], async ({ db }) => {
-    const p = z.object({ nombre: z.string().min(1, "Falta el nombre"), finca_id: z.string().uuid("Elige la finca") })
-      .parse({ nombre: s(fd, "nombre") ?? "", finca_id: s(fd, "finca_id") });
-    const tarifa = n(fd, "coste_hora");
-    if (Number.isNaN(tarifa)) throw new z.ZodError([{ code: "custom", path: [], message: "Tarifa no válida" }]);
-    const { error } = await db.from("equipos").insert({ ...p, coste_hora: tarifa });
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
+    const { error } = await db.from("equipos").insert({ ...datosPersonal(fd), finca_id });
     check(error);
     return "Equipo creado.";
+  });
+}
+
+export async function actualizarEquipo(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("equipos").update({ ...datosPersonal(fd), activo: fd.get("activo") === "on" }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar el equipo." };
+    return "Equipo actualizado. Los partes ya registrados conservan la tarifa con la que se calcularon.";
+  });
+}
+
+// Festivos: los partes de esos días se calculan con la tarifa festiva
+export async function crearFestivo(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ fecha: fechaZ, nombre: z.string().min(1, "Falta el nombre") }).parse({ fecha: s(fd, "fecha"), nombre: s(fd, "nombre") ?? "" });
+    const { error } = await db.from("festivos").insert({ ...p, finca_id: s(fd, "finca_id") });
+    check(error);
+    return "Festivo añadido.";
+  });
+}
+
+export async function eliminarFestivo(fd: FormData): Promise<Res> {
+  return run(RUTAS_MAESTROS, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("festivos").delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo eliminar el festivo." };
+    return "Festivo eliminado.";
   });
 }
 

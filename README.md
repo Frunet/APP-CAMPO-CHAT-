@@ -24,6 +24,10 @@ Con `NEXT_PUBLIC_DEMO=1` la app no necesita Supabase ni claves: usa datos fictic
 4. Crear fincas/parcelas/campañas (SQL o Table Editor) y asignar usuarios en `usuarios_fincas`.
 5. `npm run dev`
 
+## Cómo se introducen los datos
+- **Trabajo y horas, Cosechas y Gastos son de solo consulta** (pantalla con filtros y descarga en Excel/PDF). Los registros se hacen desde el **chat** o importándolos desde **Documentos**.
+- **Maestros** (solo administrador): usuarios y fincas asignadas, fincas → parcelas → lotes (opcionales), catálogo de cultivos, personal con costes (tarifa normal / extra / festivo, condiciones propias por trabajador) y festivos.
+
 ## Principios de diseño
 - La BD es la fuente de verdad; el chat solo cifra con herramientas de consulta.
 - El chat **nunca guarda**: crea filas en `acciones_pendientes`; `/api/acciones/[id]` las guarda con la sesión del usuario (RLS) tras pulsar Confirmar.

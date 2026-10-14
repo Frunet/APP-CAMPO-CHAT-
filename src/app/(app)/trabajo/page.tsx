@@ -30,26 +30,26 @@ export default async function Trabajo({ searchParams }: { searchParams: Promise<
 
       {d.error && <p role="alert" className="text-sm text-red-600">No se pudieron cargar los datos: {d.error}</p>}
       <p className="text-sm text-stone-600">
-        {d.n} partes · <b>{num(d.horas, 1)} h</b> · coste <b>{eur(d.coste)}</b>
+        {d.n} partes · <b>{num(d.horas, 1)} h</b>{d.horasExtra > 0 && <> (de ellas <b>{num(d.horasExtra, 1)} h extra</b>)</>}{d.festivos > 0 && <> · {d.festivos} en festivo</>} · coste <b>{eur(d.coste)}</b>
         {d.sinTarifa > 0 && <span className="text-amber-600"> (parcial: {d.sinTarifa} parte(s) sin tarifa)</span>}
         {d.truncado && <span className="text-amber-600"> · hay más registros de los que se pueden calcular; acota las fechas</span>}
       </p>
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead><tr>{["Fecha", "Finca", "Parcela", "Equipo / trabajador", "Personas", "h/persona", "Horas", "Actividad", "Coste", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+          <thead><tr>{["Fecha", "Finca", "Parcela / lote", "Equipo / trabajador", "Personas", "h/persona", "Extra", "Horas", "Actividad", "Coste", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-stone-100">
             {d.filas.slice(0, MOSTRAR).map((r: any) => (
               <tr key={r.id}>
-                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo ?? "—"}</td>
+                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo ?? "—"}{r.lotes?.codigo ? ` / ${r.lotes.codigo}` : ""}</td>
                 <td className="td">{r.equipos?.nombre ?? r.trabajadores?.nombre ?? "—"}</td>
-                <td className="td">{r.num_trabajadores}</td><td className="td">{num(r.horas_por_trabajador, 2)}</td><td className="td">{num(r.horas_totales, 2)}</td>
+                <td className="td">{r.num_trabajadores}</td><td className="td">{num(r.horas_por_trabajador, 2)}</td><td className="td">{Number(r.horas_extra_por_trabajador) > 0 ? num(r.horas_extra_por_trabajador, 2) : "—"}</td><td className="td">{num(r.horas_totales, 2)}{r.festivo && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">festivo</span>}</td>
                 <td className="td">{r.actividad ?? r.tipo_trabajo ?? "—"}</td>
                 <td className="td">{r.coste_total == null ? <span className="text-xs text-amber-600">sin tarifa</span> : eur(r.coste_total)}</td>
                 <td className="td"><Link className="text-brand-700" href={`/trabajo/${r.id}`}>Detalle</Link></td>
               </tr>
             ))}
-            {!d.n && <tr><td className="td text-stone-500" colSpan={10}>Sin partes para este filtro.</td></tr>}
+            {!d.n && <tr><td className="td text-stone-500" colSpan={11}>Sin partes para este filtro.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -12,7 +12,7 @@ type Nodo = { col: string } | { rel: string; inner: boolean; hijos: Nodo[] };
 
 // nombre de la relación (tabla) -> prefijo de la clave foránea
 const SING: Record<string, string> = {
-  fincas: "finca", parcelas: "parcela", campanas: "campana", documentos: "documento", equipos: "equipo", trabajadores: "trabajador", profiles: "profile",
+  fincas: "finca", parcelas: "parcela", campanas: "campana", documentos: "documento", lotes: "lote", equipos: "equipo", trabajadores: "trabajador", profiles: "profile",
 };
 
 function dividir(s: string): string[] {

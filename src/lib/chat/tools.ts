@@ -71,10 +71,16 @@ export const tools: Anthropic.Tool[] = [
       type: "object",
       properties: {
         fecha: { type: "string" }, finca: { type: "string" }, parcela: { type: "string" },
-        num_trabajadores: { type: "number" }, horas_por_trabajador: { type: "number" },
+        lote: { type: "string", description: "Lote dentro de la parcela (opcional; solo si la parcela tiene lotes)" },
+        num_trabajadores: { type: "number" },
+        horas_por_trabajador: { type: "number", description: "Horas totales de cada persona ese día (incluidas las extra)" },
+        horas_extra_por_trabajador: { type: "number", description: "De esas horas, cuántas son extra por persona (opcional)" },
+        festivo: { type: "boolean", description: "true si el usuario dice que fue festivo (los festivos dados de alta se detectan solos)" },
+        equipo: { type: "string", description: "Cuadrilla/equipo (opcional); aplica las tarifas del equipo" },
+        trabajador: { type: "string", description: "Trabajador concreto con condiciones propias (opcional, 1 persona)" },
         hora_entrada: { type: "string", description: "HH:MM" }, hora_salida: { type: "string", description: "HH:MM" },
         tipo_trabajo: { type: "string" }, actividad: { type: "string" },
-        coste_hora: { type: "number" }, observaciones: { type: "string" },
+        coste_hora: { type: "number", description: "Solo si el usuario da un precio por hora normal" }, observaciones: { type: "string" },
       },
       required: ["fecha", "finca", "num_trabajadores", "horas_por_trabajador"],
     },
@@ -86,6 +92,7 @@ export const tools: Anthropic.Tool[] = [
       type: "object",
       properties: {
         fecha: { type: "string" }, finca: { type: "string" }, parcela: { type: "string" },
+        lote: { type: "string", description: "Lote dentro de la parcela (opcional)" },
         cultivo: { type: "string" }, variedad: { type: "string" }, kg: { type: "number" },
         cajas: { type: "number" }, calibre: { type: "string" }, calidad: { type: "string" },
         destino: { type: "string" }, observaciones: { type: "string" },
@@ -130,9 +137,9 @@ export const tools: Anthropic.Tool[] = [
 ];
 
 // ---------- Resolución de finca / parcela ----------
-type Ref = { finca_id?: string; parcela_id?: string; finca?: string; parcela?: string; sup_ha?: number | null };
+type Ref = { finca_id?: string; parcela_id?: string; lote_id?: string; finca?: string; parcela?: string; lote?: string; sup_ha?: number | null };
 
-async function resolver(db: Db, fincaTxt?: string, parcelaTxt?: string): Promise<Ref | { error: string }> {
+async function resolver(db: Db, fincaTxt?: string, parcelaTxt?: string, loteTxt?: string): Promise<Ref | { error: string }> {
   const out: Ref = {};
   if (fincaTxt) {
     const { data } = await db.from("fincas").select("id,codigo,nombre,superficie_ha").eq("activa", true);
@@ -153,7 +160,35 @@ async function resolver(db: Db, fincaTxt?: string, parcelaTxt?: string): Promise
     out.parcela_id = m[0].id; out.parcela = m[0].nombre ?? m[0].codigo; out.finca_id = m[0].finca_id;
     out.sup_ha = m[0].superficie_ha;
   }
+  if (loteTxt) {
+    if (!out.parcela_id) return { error: "Para indicar un lote hay que indicar también la parcela. Pregunta cuál." };
+    const { data } = await db.from("lotes").select("id,codigo,nombre,superficie_ha").eq("parcela_id", out.parcela_id);
+    const q = loteTxt.trim().toLowerCase().replace(/^lote\s*/, "");
+    const m = (data ?? []).filter((l) => l.codigo.toLowerCase() === q || (l.nombre ?? "").toLowerCase().includes(q));
+    if (m.length === 0) return { error: `La parcela ${out.parcela} no tiene ningún lote «${loteTxt}».${(data ?? []).length ? ` Lotes: ${(data ?? []).map((l) => l.codigo).join(", ")}.` : " No tiene lotes."}` };
+    if (m.length > 1) return { error: `«${loteTxt}» es ambiguo: ${m.map((l) => l.codigo).join(", ")}. Pregunta cuál.` };
+    out.lote_id = m[0].id; out.lote = m[0].codigo;
+    if (m[0].superficie_ha != null) out.sup_ha = m[0].superficie_ha;
+  }
   return out;
+}
+
+/** Equipo/cuadrilla o trabajador concreto (condiciones propias) de la finca; solo uno de los dos. */
+async function resolverPersonal(db: Db, fincaId: string | undefined, equipoTxt?: string, trabajadorTxt?: string): Promise<{ equipo_id?: string; trabajador_id?: string; nombre?: string } | { error: string }> {
+  if (equipoTxt && trabajadorTxt) return { error: "Indica un equipo o un trabajador, no ambos en el mismo parte." };
+  const buscar = async (tabla: "equipos" | "trabajadores", txt: string) => {
+    let qb = db.from(tabla).select("id,nombre,finca_id").eq("activo", true);
+    if (fincaId) qb = qb.eq("finca_id", fincaId);
+    const { data } = await qb;
+    const q = txt.trim().toLowerCase();
+    const m = (data ?? []).filter((x: any) => x.nombre.toLowerCase().includes(q));
+    if (m.length === 0) return { error: `No hay ${tabla === "equipos" ? "ningún equipo" : "ningún trabajador"} «${txt}» en esa finca. Pregunta o usa solo el número de personas.` };
+    if (m.length > 1) return { error: `«${txt}» es ambiguo: ${m.map((x: any) => x.nombre).join(", ")}. Pregunta cuál.` };
+    return { id: m[0].id as string, nombre: m[0].nombre as string };
+  };
+  if (equipoTxt) { const r = await buscar("equipos", equipoTxt); return "error" in r ? r : { equipo_id: r.id, nombre: r.nombre }; }
+  if (trabajadorTxt) { const r = await buscar("trabajadores", trabajadorTxt); return "error" in r ? r : { trabajador_id: r.id, nombre: r.nombre }; }
+  return {};
 }
 const esError = (r: Ref | { error: string }): r is { error: string } => "error" in r;
 
@@ -167,7 +202,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
       case "listar_fincas_parcelas": {
         const { data } = await db
           .from("fincas")
-          .select("codigo,nombre,tipo_explotacion,superficie_ha,parcelas(codigo,nombre,superficie_ha,estado,cultivos_parcela(cultivo,variedad,fecha_prevista_cosecha))")
+          .select("codigo,nombre,tipo_explotacion,superficie_ha,parcelas(codigo,nombre,superficie_ha,estado,lotes(codigo,nombre),cultivos_parcela(cultivo,variedad,fecha_prevista_cosecha)),equipos(nombre,activo),trabajadores(nombre,activo)")
           .eq("activa", true);
         return data ?? [];
       }
@@ -308,7 +343,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
 
 // ---------- Propuestas (requieren confirmación humana) ----------
 async function proponer(name: string, i: any, ctx: Ctx) {
-  const ref = await resolver(ctx.db, i.finca, i.parcela);
+  const ref = await resolver(ctx.db, i.finca, i.parcela, i.lote);
   if (esError(ref)) return ref;
   if (name !== "proponer_tarea" && !ref.finca_id) return { error: "Falta la finca. Pregunta al usuario." };
   if ((name === "proponer_cosecha") && !ref.parcela_id) return { error: "Falta la parcela. Pregunta al usuario." };
@@ -316,23 +351,34 @@ async function proponer(name: string, i: any, ctx: Ctx) {
   if (name === "proponer_tarea" && i.semana) fecha.parse(i.semana);
 
   let tipo: string, payload: Record<string, unknown>, resumen: string;
-  const lugar = `${ref.finca ?? "—"}${ref.parcela ? ` · parcela ${ref.parcela}` : ""}`;
+  const lugar = `${ref.finca ?? "—"}${ref.parcela ? ` · parcela ${ref.parcela}` : ""}${ref.lote ? ` · lote ${ref.lote}` : ""}`;
   if (name === "proponer_parte_trabajo") {
+    const personal = await resolverPersonal(ctx.db, ref.finca_id, i.equipo, i.trabajador);
+    if (esError(personal as any)) return personal;
+    const extra = Number(i.horas_extra_por_trabajador ?? 0);
+    if (!(extra >= 0) || extra > Number(i.horas_por_trabajador)) return { error: "Las horas extra por persona no pueden superar las horas por persona. Pregunta al usuario." };
+    if (i.trabajador && Number(i.num_trabajadores) !== 1) return { error: "Un parte de un trabajador concreto es de 1 persona. Pregunta al usuario." };
     const total = round(Number(i.num_trabajadores) * Number(i.horas_por_trabajador));
     tipo = "registrar_parte";
     payload = {
-      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id ?? null,
+      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id ?? null, lote_id: ref.lote_id ?? null,
+      equipo_id: (personal as any).equipo_id ?? null, trabajador_id: (personal as any).trabajador_id ?? null,
+      horas_extra_por_trabajador: extra, festivo: i.festivo === true,
       num_trabajadores: i.num_trabajadores, horas_por_trabajador: i.horas_por_trabajador,
       hora_entrada: i.hora_entrada ?? null, hora_salida: i.hora_salida ?? null,
       tipo_trabajo: i.tipo_trabajo ?? null, actividad: i.actividad ?? null,
       coste_hora: i.coste_hora ?? null, observaciones: i.observaciones ?? null, origen: "chat",
     };
     resumen = `Parte de trabajo · ${i.fecha} · ${lugar}\n${i.num_trabajadores} trabajadores × ${i.horas_por_trabajador} h = ${total} h` +
-      (i.actividad ? `\nActividad: ${i.actividad}` : "") + (i.coste_hora ? `\nCoste estimado: ${round(total * i.coste_hora)} €` : "\nCoste: se calculará si hay tarifa configurada");
+      (extra > 0 ? ` (de ellas ${round(extra * Number(i.num_trabajadores))} h extra)` : "") +
+      ((personal as any).nombre ? `\n${i.trabajador ? "Trabajador" : "Equipo"}: ${(personal as any).nombre}` : "") +
+      (i.festivo === true ? "\nDía festivo" : "") +
+      (i.actividad ? `\nActividad: ${i.actividad}` : "") +
+      (i.coste_hora ? `\nTarifa normal indicada: ${i.coste_hora} €/h` : "\nCoste: se calculará con las tarifas de Maestros (sin tarifa quedará «sin tarifa»)");
   } else if (name === "proponer_cosecha") {
     tipo = "registrar_cosecha";
     payload = {
-      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id, cultivo: i.cultivo,
+      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id, lote_id: ref.lote_id ?? null, cultivo: i.cultivo,
       variedad: i.variedad ?? null, kg: i.kg, cajas: i.cajas ?? null, calibre: i.calibre ?? null,
       calidad: i.calidad ?? null, destino: i.destino ?? null, observaciones: i.observaciones ?? null, origen: "chat",
     };

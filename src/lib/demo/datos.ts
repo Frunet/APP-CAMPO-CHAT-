@@ -46,20 +46,36 @@ export function datosDemo(): Tablas {
     P(24, 1, "P4", "Ladera nueva", 5.0, "en_preparacion"), P(25, 2, "P1", "Vega norte", 6.0), P(26, 2, "P2", "Vega sur", 6.0),
   ];
   const C = (n: number, parcela: number, cultivo: string, variedad: string, plant: string, prev: string | null): Row =>
-    ({ id: uid(n), parcela_id: uid(parcela), campana_id: uid(11), cultivo, variedad, fecha_plantacion: plant, fecha_prevista_cosecha: prev, observaciones: null });
+    ({ id: uid(n), parcela_id: uid(parcela), campana_id: uid(11), lote_id: null, cultivo, variedad, fecha_plantacion: plant, fecha_prevista_cosecha: prev, observaciones: null });
   const cultivos_parcela: Row[] = [
     C(31, 21, "Mango", "Osteen", "2016-03-15", null), C(32, 22, "Mango", "Kent", "2017-04-02", dia(hoy, 9)),
     C(33, 23, "Mango", "Osteen", "2015-03-20", null), C(34, 24, "Mango", "Tommy Atkins", "2025-11-10", dia(hoy, 21)),
     C(35, 25, "Aguacate", "Hass", "2018-02-12", dia(hoy, 40)), C(36, 26, "Mango", "Keitt", "2019-03-05", dia(hoy, 4)),
   ];
+  const L = (n: number, parcela: number, codigo: string, nombre: string, ha: number): Row =>
+    ({ id: uid(n), parcela_id: uid(parcela), codigo, nombre, superficie_ha: ha, estado: "activa", observaciones: null });
+  const lotes: Row[] = [
+    L(201, 21, "L1", "Zona alta", 3.1), L(202, 21, "L2", "Zona baja", 3.1),
+    L(203, 23, "L1", "Norte", 2.5), L(204, 23, "L2", "Centro", 2.5), L(205, 23, "L3", "Sur", 2.5),
+  ];
+  const cultivos_maestro: Row[] = [
+    { id: uid(401), cultivo: "Mango", variedad: "Osteen", activo: true }, { id: uid(402), cultivo: "Mango", variedad: "Kent", activo: true },
+    { id: uid(403), cultivo: "Mango", variedad: "Tommy Atkins", activo: true }, { id: uid(404), cultivo: "Mango", variedad: "Keitt", activo: true },
+    { id: uid(405), cultivo: "Aguacate", variedad: "Hass", activo: true },
+  ];
+  const diaFestivo = dow(dia(hoy, -8)) === 7 ? dia(hoy, -9) : dia(hoy, -8);
+  const festivos: Row[] = [
+    { id: uid(301), fecha: diaFestivo, nombre: "Fiesta local", finca_id: null },
+    { id: uid(302), fecha: dia(hoy, 25), nombre: "Festivo regional", finca_id: null },
+  ];
   const equipos: Row[] = [
-    { id: uid(41), finca_id: uid(1), nombre: "Cuadrilla recolección A", coste_hora: 9.5, activo: true },
-    { id: uid(42), finca_id: uid(1), nombre: "Cuadrilla recolección B", coste_hora: 9.5, activo: true },
-    { id: uid(43), finca_id: uid(2), nombre: "Cuadrilla Vega", coste_hora: null, activo: true },
+    { id: uid(41), finca_id: uid(1), nombre: "Cuadrilla recolección A", coste_hora: 9.5, coste_hora_extra: 14.25, coste_hora_festivo: 19, condiciones: null, activo: true },
+    { id: uid(42), finca_id: uid(1), nombre: "Cuadrilla recolección B", coste_hora: 9.5, coste_hora_extra: 14.25, coste_hora_festivo: 19, condiciones: null, activo: true },
+    { id: uid(43), finca_id: uid(2), nombre: "Cuadrilla Vega", coste_hora: null, coste_hora_extra: null, coste_hora_festivo: null, condiciones: "Tarifa pendiente de acordar", activo: true },
   ];
   const trabajadores: Row[] = [
-    { id: uid(51), finca_id: uid(1), nombre: "Antonio Ruiz (tractorista)", coste_hora: 12, activo: true },
-    { id: uid(52), finca_id: uid(1), nombre: "María López", coste_hora: null, activo: true },
+    { id: uid(51), finca_id: uid(1), nombre: "Antonio Ruiz (tractorista)", coste_hora: 12, coste_hora_extra: 18, coste_hora_festivo: 24, condiciones: "Jornal pactado; incluye plus de maquinaria", activo: true },
+    { id: uid(52), finca_id: uid(1), nombre: "María López", coste_hora: null, coste_hora_extra: null, coste_hora_festivo: null, condiciones: null, activo: true },
   ];
 
   // Cosechas y partes de los últimos 30 días (sin domingos; se saltan 2 días de partes para ver los avisos)
@@ -107,6 +123,40 @@ export function datosDemo(): Tablas {
     actividad: "Recolección Kent (revisar)", coste_hora: 9.5, coste_total: 608, observaciones: null, origen: "manual", created_at: ahora,
   });
 
+  // Partes individuales de un trabajador con condiciones propias (tarifas distintas a las de la cuadrilla)
+  for (const d of [-9, -7, -6, -4, -3, -1]) {
+    const f = dia(hoy, d);
+    if (dow(f) === 7) continue;
+    partes.push({
+      id: uid(n++), fecha: f, finca_id: uid(1), parcela_id: uid(21), trabajador_id: uid(51), equipo_id: null,
+      num_trabajadores: 1, hora_entrada: null, hora_salida: null, horas_por_trabajador: 8, horas_totales: 8, tipo_trabajo: "Tractor",
+      actividad: "Tratamiento con tractor", observaciones: null, origen: "chat", created_at: ahora,
+    });
+  }
+
+  // Reglas de coste (igual que en la base de datos): festivo = todas las horas × tarifa festiva;
+  // resto = normales × tarifa normal + extra × tarifa extra; sin tarifa necesaria → coste vacío
+  const tarifas = new Map<string, Row>([...equipos, ...trabajadores].map((x) => [x.id as string, x]));
+  const setFestivos = new Set(festivos.map((x) => x.fecha as string));
+  for (const p of partes) {
+    const t = tarifas.get((p.trabajador_id ?? p.equipo_id) as string) ?? {};
+    const extra = p.tipo_trabajo === "Recolección" && r() < 0.25 ? 1 : p.trabajador_id && r() < 0.5 ? 1 : 0;
+    p.horas_extra_por_trabajador = Math.min(extra, p.horas_por_trabajador);
+    p.horas_extra_totales = redondea(p.horas_extra_por_trabajador * p.num_trabajadores);
+    p.festivo = setFestivos.has(p.fecha);
+    p.coste_hora = t.coste_hora ?? null; p.coste_hora_extra = t.coste_hora_extra ?? null; p.coste_hora_festivo = t.coste_hora_festivo ?? null;
+    const normales = p.horas_por_trabajador - p.horas_extra_por_trabajador;
+    if (p.festivo) p.coste_total = p.coste_hora_festivo == null ? null : redondea(p.horas_totales * p.coste_hora_festivo);
+    else if ((normales > 0 && p.coste_hora == null) || (p.horas_extra_por_trabajador > 0 && p.coste_hora_extra == null)) p.coste_total = null;
+    else p.coste_total = redondea(p.num_trabajadores * (normales * (p.coste_hora ?? 0) + p.horas_extra_por_trabajador * (p.coste_hora_extra ?? 0)));
+  }
+  // Los lotes existen en dos parcelas: parte de los registros de esas parcelas se hacen por lote
+  const lotesDe = (pid: string) => lotes.filter((l) => l.parcela_id === pid);
+  for (const x of [...cosechas, ...partes]) {
+    const ls = lotesDe(x.parcela_id);
+    x.lote_id = ls.length && r() < 0.7 ? ls[Math.floor(r() * ls.length)].id : null;
+  }
+
   const documentos: Row[] = [
     { id: uid(61), nombre: "Factura_Agroquimicos_0425.pdf", tipo: "factura", mime: "application/pdf", tamano_bytes: 184320, storage_path: "demo/1", finca_id: uid(1), parcela_id: null, campana_id: uid(11), fecha_documento: dia(hoy, -12), texto_extraido: "Agroquímicos del Sur S.L. Factura 0425 Fertilizante NPK 1.240,00 EUR", datos_extraidos: { resumen: "Factura de fertilizantes por 1.240 EUR.", registros: [{ tipo: "gasto", fecha: dia(hoy, -12), proveedor: "Agroquímicos del Sur", categoria: "insumos", concepto: "Fertilizante NPK", importe: 1240, moneda: "EUR", dudas: [] }], importados: [0] }, estado: "importado", created_by: DEMO_UID, created_at: ahora },
     { id: uid(62), nombre: "Albaran_cosecha_semana41.xlsx", tipo: "informe_cosecha", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", tamano_bytes: 22450, storage_path: "demo/2", finca_id: uid(2), parcela_id: null, campana_id: uid(11), fecha_documento: dia(hoy, -3), texto_extraido: "Albarán de entrega cooperativa semana 41 Keitt", datos_extraidos: { resumen: "Albarán con 3 entregas de mango Keitt de La Vega.", registros: [
@@ -124,7 +174,7 @@ export function datosDemo(): Tablas {
 
   const g = (k: number, delta: number, categoria: string, importe: number, proveedor: string, concepto: string, finca = 1, tipo = "registrado", doc: number | null = null): Row => ({
     id: uid(80 + k), fecha: dia(hoy, delta), proveedor, categoria, concepto, importe, moneda: "EUR", tipo_importe: tipo, finca_id: uid(finca), parcela_id: null,
-    campana_id: uid(11), documento_id: doc ? uid(doc) : null, observaciones: null, created_at: ahora,
+    campana_id: uid(11), documento_id: doc ? uid(doc) : null, lote_id: null, observaciones: null, created_at: ahora,
   });
   const gastos: Row[] = [
     g(1, -12, "insumos", 1240, "Agroquímicos del Sur", "Fertilizante NPK", 1, "registrado", 61), g(2, -20, "combustible", 612.4, "Costa Gasóleos", "Gasóleo agrícola", 1, "registrado", 64),
@@ -190,7 +240,7 @@ export function datosDemo(): Tablas {
   ];
 
   CACHE = {
-    profiles, fincas, usuarios_fincas, campanas, parcelas, cultivos_parcela, equipos, trabajadores, cosechas, partes_trabajo: partes,
+    profiles, fincas, usuarios_fincas, campanas, parcelas, lotes, cultivos_maestro, festivos, cultivos_parcela, equipos, trabajadores, cosechas, partes_trabajo: partes,
     documentos, documentos_esperados, gastos, tareas, avisos, avisos_reglas, objetivos, chat_conversaciones, chat_mensajes,
     acciones_pendientes, audit_log,
   };

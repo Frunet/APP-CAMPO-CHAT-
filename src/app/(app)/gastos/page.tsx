@@ -77,11 +77,11 @@ export default async function Gastos({ searchParams }: { searchParams: Promise<R
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead><tr>{["Fecha", "Finca", "Parcela", "Categoría", "Proveedor / concepto", "Importe", "Naturaleza", "Doc.", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+          <thead><tr>{["Fecha", "Finca", "Parcela / lote", "Categoría", "Proveedor / concepto", "Importe", "Naturaleza", "Doc.", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-stone-100">
             {d.filas.slice(0, MOSTRAR).map((r: any) => (
               <tr key={r.id} className={r.tipo_importe !== "registrado" ? "bg-amber-50/50" : ""}>
-                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo ?? "—"}</td>
+                <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo ?? "—"}{r.lotes?.codigo ? ` / ${r.lotes.codigo}` : ""}</td>
                 <td className="td">{nombreCat[r.categoria]}</td><td className="td">{[r.proveedor, r.concepto].filter(Boolean).join(" · ") || "—"}</td>
                 <td className="td font-medium">{num(r.importe, 2)} {r.moneda}</td>
                 <td className="td text-xs">{nombreTipo[r.tipo_importe]}</td>

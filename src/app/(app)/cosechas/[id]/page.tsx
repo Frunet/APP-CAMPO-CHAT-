@@ -9,7 +9,7 @@ export default async function DetalleCosecha({ params }: { params: Promise<{ id:
   const { id } = await params;
   const ctx = await cargarContexto();
   const { data } = await ctx.db.from("cosechas")
-    .select("*, fincas(nombre), parcelas(codigo), campanas(nombre), equipos(nombre)").eq("id", id).maybeSingle();
+    .select("*, fincas(nombre), parcelas(codigo), lotes(codigo), campanas(nombre), equipos(nombre)").eq("id", id).maybeSingle();
   if (!data) notFound();
   const r = data as any;
 
@@ -19,7 +19,7 @@ export default async function DetalleCosecha({ params }: { params: Promise<{ id:
       <h1 className="text-xl font-semibold">Cosecha del {fecha(r.fecha)}</h1>
       <div className="card">
         <Ficha datos={[
-          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Cultivo", r.cultivo], ["Variedad", r.variedad],
+          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Lote", r.lotes?.codigo], ["Cultivo", r.cultivo], ["Variedad", r.variedad],
           ["Campaña", r.campanas?.nombre], ["Kilogramos", `${num(r.kg, 2)} kg`], ["Cajas", r.cajas], ["Calibre", r.calibre],
           ["Calidad / categoría", r.calidad], ["Destino", r.destino], ["Equipo de recolección", r.equipos?.nombre], ["Origen", r.origen],
           ["Observaciones", r.observaciones],
