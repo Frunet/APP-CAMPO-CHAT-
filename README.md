@@ -3,6 +3,9 @@
 Next.js 16 + Supabase (Postgres/RLS/Auth/Storage) + Claude API.
 
 ## Ver la app sin configurar nada (modo demo)
+**Desde GitHub, un clic:** [Abrir en Codespaces](https://codespaces.new/Frunet/APP-CAMPO-CHAT-?quickstart=1) → «Create codespace». Tarda ~2 min en instalar y abre la demo en el puerto 3000 (datos ficticios, sin claves).
+
+**En local:**
 ```bash
 echo NEXT_PUBLIC_DEMO=1 > .env.local
 npm install
