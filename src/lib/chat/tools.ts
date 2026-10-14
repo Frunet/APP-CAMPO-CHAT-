@@ -51,7 +51,7 @@ export const tools: Anthropic.Tool[] = [
   },
   {
     name: "listar_pendientes",
-    description: "Devuelve avisos sin resolver, tareas próximas y días recientes sin parte de trabajo registrado.",
+    description: "Devuelve tareas próximas y días recientes sin parte de trabajo registrado.",
     input_schema: { type: "object", properties: { dias: { type: "number", description: "Días hacia atrás/adelante (def. 7)" } } },
   },
   {
@@ -231,8 +231,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         const iso = (d: Date) => d.toISOString().slice(0, 10);
         const desde = new Date(hoy.getTime() - dias * 864e5);
         const hasta = new Date(hoy.getTime() + dias * 864e5);
-        const [avisos, tareas, sinDia, partes, acciones] = await Promise.all([
-          db.from("avisos").select("titulo,prioridad,estado").in("estado", ["pendiente", "pospuesto"]).limit(50),
+        const [tareas, sinDia, partes, acciones] = await Promise.all([
           db.from("tareas").select("titulo,fecha,semana_inicio,tipo").eq("completada", false).lte("fecha", iso(hasta)).order("fecha").limit(50),
           db.from("tareas").select("titulo,semana_inicio,tipo").eq("completada", false).is("fecha", null).limit(50),
           db.from("partes_trabajo").select("fecha").gte("fecha", iso(desde)).lte("fecha", iso(hoy)),
@@ -241,7 +240,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         const conParte = new Set((partes.data ?? []).map((x: any) => x.fecha));
         const sinParte: string[] = [];
         for (let d = new Date(desde); d <= hoy; d = new Date(d.getTime() + 864e5)) if (!conParte.has(iso(d))) sinParte.push(iso(d));
-        return { avisos: avisos.data, tareas: tareas.data, tareas_sin_dia: sinDia.data /* semana_inicio nulo = pendiente sin fecha */, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
+        return { tareas: tareas.data, tareas_sin_dia: sinDia.data /* semana_inicio nulo = pendiente sin fecha */, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
       }
       case "consultar_costes_generales":
         return await consultarCostesGenerales(input, ctx);

@@ -107,7 +107,7 @@ export default async function Informes({ searchParams }: { searchParams: Promise
             <div className="h-2 rounded bg-stone-100"><div className="h-2 rounded bg-brand-500" style={{ width: `${Math.min(100, (o.kg / Number(o.kg_objetivo)) * 100)}%` }} /></div>
           </div>
         ))}
-        {!progreso.length && <p className="text-sm text-stone-500">No hay objetivos definidos. Si los defines, recibirás un aviso cuando no se cumplan.</p>}
+        {!progreso.length && <p className="text-sm text-stone-500">No hay objetivos definidos..</p>}
         {ctx.puedeGestionar && (
           <details className="mt-2">
             <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Nuevo objetivo</summary>

@@ -41,10 +41,7 @@ Carpeta `supabase-propio/`: instalación guiada en 4 pasos (`1_instalar`, `2_apl
 - Fase 1 (hecha): esquema completo, auth, chat con confirmación, dashboard, listados de fincas/partes/cosechas.
 - Fase 1b (hecha): usuarios, formularios de alta/edición, historial de cambios.
 - Fase 2 (hecha): gastos y costes, documentos (subida, lectura con IA, revisión antes de importar, descarga, búsqueda, pendientes de recibir).
-- Fase 3 (hecha): avisos automáticos (cron + correo, sin duplicados, leído/resuelto/pospuesto), calendario con vistas de mes y semana (tareas con día, asignadas a una semana o pendientes sin fecha), informes con exportación a Excel y PDF, objetivos de producción, voz en el chat. Push móvil: arquitectura preparada (`src/lib/avisos/canales.ts`), sin implementar.
+- Fase 3 (hecha): calendario con vistas de mes y semana (tareas con día, asignadas a una semana o pendientes sin fecha), informes con exportación a Excel y PDF, objetivos de producción, voz en el chat.
 
-## Avisos en segundo plano
-`GET /api/cron/avisos` con `Authorization: Bearer $CRON_SECRET` evalúa las reglas y envía los correos (Resend).
-- `vercel.json` lo programa cada hora. **El plan Hobby de Vercel solo permite 1 ejecución al día**: con Hobby, cambia el cron a diario o usa pg_cron/otro planificador que llame a esa URL cada hora.
-- Sin `RESEND_API_KEY`/`EMAIL_FROM` los avisos se generan en la app y los correos quedan pendientes.
-- En Avisos > «Crear reglas recomendadas» se crea el conjunto base.
+## Avisos
+El módulo «Avisos y tareas» se eliminó (y con él los correos automáticos). Las tareas se gestionan en el Calendario y por el chat. Las tablas `avisos` y `avisos_reglas` siguen en la base de datos sin uso.

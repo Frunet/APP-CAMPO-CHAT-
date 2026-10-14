@@ -11,11 +11,10 @@ export default async function Inicio() {
   const kgEn = async (desde: string, hasta: string) =>
     (await db.from("cosechas").select("kg").gte("fecha", desde).lte("fecha", hasta)).data?.reduce((a, r) => a + Number(r.kg), 0) ?? 0;
   const hace14 = sumarDias(p.hoy, -13);
-  const [kgHoy, kgSem, kgMes, partesSem, partesMes, avisos, tareas, pendientes, serie, proximas, partesSinTarifa, cosechasSinCampana, tareasSinFecha] = await Promise.all([
+  const [kgHoy, kgSem, kgMes, partesSem, partesMes, tareas, pendientes, serie, proximas, partesSinTarifa, cosechasSinCampana, tareasSinFecha] = await Promise.all([
     kgEn(p.hoy, p.hoy), kgEn(p.semana.desde, p.semana.hasta), kgEn(p.mes.desde, p.mes.hasta),
     db.from("partes_trabajo").select("horas_totales,coste_total").gte("fecha", p.semana.desde).lte("fecha", p.semana.hasta),
     db.from("partes_trabajo").select("horas_totales,coste_total").gte("fecha", p.mes.desde).lte("fecha", p.mes.hasta),
-    db.from("avisos").select("id,titulo,prioridad").eq("estado", "pendiente").order("created_at", { ascending: false }).limit(5),
     db.from("tareas").select("titulo,fecha,tipo").eq("completada", false).gte("fecha", p.hoy).order("fecha").limit(5),
     db.from("acciones_pendientes").select("id", { count: "exact", head: true }).eq("estado", "pendiente"),
     db.from("cosechas").select("fecha,kg").gte("fecha", hace14).lte("fecha", p.hoy),
@@ -74,12 +73,7 @@ export default async function Inicio() {
         </section>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <section className="card">
-          <h2 className="mb-2 font-medium">Avisos pendientes</h2>
-          {avisos.data?.length ? avisos.data.map((a) => <p key={a.id} className="text-sm">• {a.titulo} <span className="text-xs text-stone-400">({a.prioridad})</span></p>) : <p className="text-sm text-stone-500">Sin avisos.</p>}
-          <Link href="/avisos" className="mt-2 inline-block text-sm text-brand-700">Ver todos →</Link>
-        </section>
+      <div className="grid gap-3">
         <section className="card">
           <h2 className="mb-2 font-medium">Próximas tareas</h2>
           {tareas.data?.length ? tareas.data.map((t, i) => <p key={i} className="text-sm">• {fecha(t.fecha)} · {t.titulo}</p>) : <p className="text-sm text-stone-500">Nada programado.</p>}

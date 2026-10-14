@@ -12,14 +12,13 @@ const todos: { href: string; label: string; icon: string; soloAdmin?: boolean }[
   { href: "/cosechas", label: "Cosechas", icon: "🥭" },
   { href: "/gastos", label: "Gastos y costes", icon: "💶" },
   { href: "/calendario", label: "Calendario", icon: "📅" },
-  { href: "/avisos", label: "Avisos y tareas", icon: "🔔" },
   { href: "/informes", label: "Informes", icon: "📊" },
   { href: "/maestros", label: "Maestros", icon: "🗂️", soloAdmin: true },
 ];
 const movil = ["/", "/chat", "/trabajo", "/cosechas"];
 
 
-export default function Nav({ nombre, rol, avisos }: { nombre: string; rol: string; avisos: number }) {
+export default function Nav({ nombre, rol }: { nombre: string; rol: string }) {
   const items = todos.filter((i) => !i.soloAdmin || rol === "administrador"); // Maestros: solo administrador
   const path = usePathname();
   const router = useRouter();
@@ -35,7 +34,6 @@ export default function Nav({ nombre, rol, avisos }: { nombre: string; rol: stri
     <Link key={i.href} href={i.href} onClick={() => setAbierto(false)}
       className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${activo(i.href) ? "bg-brand-100 font-medium text-brand-900" : "text-stone-700 hover:bg-stone-100"}`}>
       <span>{i.icon}</span><span className="flex-1">{i.label}</span>
-      {i.href === "/avisos" && avisos > 0 && <span className="rounded-full bg-red-500 px-2 text-xs text-white">{avisos}</span>}
     </Link>
   );
 

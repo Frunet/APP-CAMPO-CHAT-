@@ -46,7 +46,7 @@ export const herramientasDocumentos: Anthropic.Tool[] = [
     name: "proponer_documento_esperado",
     description:
       "Prepara (NO guarda) el aviso de un documento que se espera recibir (p. ej. el informe de cosecha de una finca externa), para confirmación. " +
-      "Los avisos automáticos lo recordarán cuando llegue su fecha. Solo responsables y administradores.",
+      "Quedará en la lista de documentos pendientes de recibir. Solo responsables y administradores.",
     input_schema: {
       type: "object",
       properties: {

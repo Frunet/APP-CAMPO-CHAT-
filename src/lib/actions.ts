@@ -213,6 +213,86 @@ export async function eliminarCosteGeneral(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- cuenta de resultados: ventas, registros sin factura, proveedores, categoría de los gastos ----------
+// Los permisos los impone la base de datos (RLS): solo responsables y administrador en sus fincas.
+const RUTAS_RES = ["/resultados", "/gastos", "/maestros"];
+const CATEGORIAS_RES = ["insumos", "suministros", "consumibles", "mano_obra", "reparaciones", "otros_gastos", "personal_fijo", "servicios_profesionales", "instalaciones", "gastos_generales", "gastos_financieros"] as const;
+const TIPO_A_CATEGORIA: Record<string, string> = { jornal: "mano_obra", nomina: "personal_fijo", prestamo: "gastos_financieros", tributo: "gastos_generales" };
+
+export async function crearVenta(fd: FormData): Promise<Res> {
+  return run(RUTAS_RES, async ({ db }) => {
+    const p = z.object({ fecha: fechaZ, finca_id: z.string().uuid("Elige la finca") }).parse({ fecha: s(fd, "fecha"), finca_id: s(fd, "finca_id") });
+    const importe = numeroOpcional(fd, "importe", "El importe", 100_000_000);
+    if (importe == null) throw { message: "Falta el importe (sin IVA)" };
+    const { error } = await db.from("ventas").insert({ ...p, importe, cliente: s(fd, "cliente"), numero_factura: s(fd, "numero_factura"), campana_id: s(fd, "campana_id"), observaciones: s(fd, "observaciones") });
+    check(error);
+    return "Venta registrada.";
+  });
+}
+
+export async function crearMovimientoResultado(fd: FormData): Promise<Res> {
+  return run(RUTAS_RES, async ({ db }) => {
+    const p = z.object({
+      fecha: fechaZ, finca_id: z.string().uuid("Elige la finca"), tipo: z.enum(["jornal", "nomina", "prestamo", "tributo", "otro"], { message: "Elige el tipo" }),
+    }).parse({ fecha: s(fd, "fecha"), finca_id: s(fd, "finca_id"), tipo: s(fd, "tipo") });
+    const importe = numeroOpcional(fd, "importe", "El importe", 100_000_000);
+    if (importe == null) throw { message: "Falta el importe" };
+    const categoria = z.enum(CATEGORIAS_RES).safeParse(s(fd, "categoria") ?? TIPO_A_CATEGORIA[p.tipo]);
+    if (!categoria.success) throw { message: "Elige el concepto de la cuenta de resultados" };
+    const { error } = await db.from("movimientos_resultado").insert({ ...p, categoria: categoria.data, importe, concepto: s(fd, "concepto"), observaciones: s(fd, "observaciones") });
+    check(error);
+    return "Registro guardado.";
+  });
+}
+
+async function borrar(tabla: "ventas" | "movimientos_resultado", fd: FormData, msg: string) {
+  return run(RUTAS_RES, async ({ db }) => {
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from(tabla).delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo eliminar (¿no tienes permiso?)." };
+    return msg;
+  });
+}
+export const eliminarVenta = async (fd: FormData): Promise<Res> => borrar("ventas", fd, "Venta eliminada (queda en el historial).");
+export const eliminarMovimientoResultado = async (fd: FormData): Promise<Res> => borrar("movimientos_resultado", fd, "Registro eliminado (queda en el historial).");
+
+export async function cambiarCategoriaGasto(fd: FormData): Promise<Res> {
+  return run(RUTAS_RES, async ({ db }) => {
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const categoria = z.enum(CATEGORIAS_RES, { message: "Categoría no válida" }).parse(s(fd, "categoria"));
+    const { data, error } = await db.from("gastos").update({ categoria_resultado: categoria }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo cambiar (¿no tienes permiso?)." };
+    return "Categoría cambiada.";
+  });
+}
+
+export async function crearProveedor(fd: FormData): Promise<Res> {
+  return run(RUTAS_RES, async ({ db }) => {
+    await exigirAdmin(db);
+    const nombre = z.string().min(1, "Falta el nombre").parse(s(fd, "nombre") ?? "");
+    const cat = s(fd, "categoria_defecto");
+    if (cat && !CATEGORIAS_RES.includes(cat as any)) throw { message: "Categoría no válida" };
+    const { error } = await db.from("proveedores").insert({ nombre, nif: s(fd, "nif"), categoria_defecto: cat });
+    check(error);
+    return "Proveedor guardado.";
+  });
+}
+
+export async function actualizarProveedor(fd: FormData): Promise<Res> {
+  return run(RUTAS_RES, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const cat = s(fd, "categoria_defecto");
+    if (cat && !CATEGORIAS_RES.includes(cat as any)) throw { message: "Categoría no válida" };
+    const { data, error } = await db.from("proveedores").update({ categoria_defecto: cat }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar." };
+    return "Categoría por defecto guardada (afecta a las facturas nuevas).";
+  });
+}
+
 // Catálogo de cultivos y variedades
 export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {
@@ -453,93 +533,7 @@ export async function descartarDocumento(fd: FormData): Promise<Res> {
   });
 }
 
-// ---------- avisos ----------
-export async function cambiarEstadoAviso(fd: FormData): Promise<Res> {
-  return run(["/avisos", "/"], async ({ db }) => {
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const estado = z.enum(["leido", "resuelto", "pospuesto", "pendiente"]).parse(s(fd, "estado"));
-    const dias = n(fd, "dias");
-    const cambios: Record<string, unknown> = { estado, pospuesto_hasta: null };
-    if (estado === "pospuesto") {
-      if (!dias || dias < 1 || dias > 90) throw new z.ZodError([{ code: "custom", path: [], message: "Indica de 1 a 90 días" }]);
-      cambios.pospuesto_hasta = new Date(Date.now() + dias * 864e5).toISOString();
-    }
-    const { data, error } = await db.from("avisos").update(cambios).eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "Aviso no encontrado." };
-    return "Aviso actualizado.";
-  });
-}
-
-const PRIORIDADES = z.enum(["baja", "media", "alta", "critica"]);
-const PERIODICIDAD = z.enum(["diaria", "semanal", "mensual"]);
-
-export async function guardarRegla(fd: FormData): Promise<Res> {
-  return run(["/avisos"], async ({ db }) => {
-    const { TIPOS_REGLA } = await import("@/lib/avisos/tipos");
-    const p = z.object({
-      tipo: z.string().refine((t) => t in TIPOS_REGLA, "Tipo de aviso no válido"), nombre: z.string().min(1, "Falta el nombre"),
-      hora: z.string().regex(/^\d{2}:\d{2}/, "Hora no válida"), periodicidad: PERIODICIDAD, prioridad: PRIORIDADES,
-      dia_semana: z.number().int().min(1).max(7), dia_mes: z.number().int().min(1).max(28),
-    }).parse({
-      tipo: s(fd, "tipo"), nombre: s(fd, "nombre") ?? "", hora: s(fd, "hora"), periodicidad: s(fd, "periodicidad"), prioridad: s(fd, "prioridad"),
-      dia_semana: n(fd, "dia_semana") ?? 1, dia_mes: n(fd, "dia_mes") ?? 1,
-    });
-    const dias = n(fd, "dias");
-    if (Number.isNaN(dias) || (dias != null && (dias < 0 || dias > 365))) throw new z.ZodError([{ code: "custom", path: [], message: "Días no válido" }]);
-    const parametros = { ...(TIPOS_REGLA[p.tipo].params as object), ...(dias != null ? (p.tipo === "falta_parte" ? { dias_atras: dias } : { dias }) : {}) };
-    const row = {
-      ...p, hora: p.hora.slice(0, 5), parametros, finca_id: s(fd, "finca_id"), enviar_email: fd.get("enviar_email") === "on",
-      destinatarios: fd.getAll("destinatarios").filter((x): x is string => typeof x === "string"),
-    };
-    const id = s(fd, "id");
-    if (id) {
-      const { data, error } = await db.from("avisos_reglas").update(row).eq("id", id).select("id");
-      check(error);
-      if (!data?.length) throw { message: "No tienes permiso para esta operación." };
-      return "Regla actualizada.";
-    }
-    const { error } = await db.from("avisos_reglas").insert(row);
-    check(error);
-    return "Regla creada.";
-  });
-}
-
-export async function alternarRegla(fd: FormData): Promise<Res> {
-  return run(["/avisos"], async ({ db }) => {
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const activa = fd.get("activa") === "true";
-    const { data, error } = await db.from("avisos_reglas").update({ activa }).eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "No tienes permiso para esta operación." };
-    return activa ? "Regla activada." : "Regla desactivada.";
-  });
-}
-
-export async function eliminarRegla(fd: FormData): Promise<Res> {
-  return run(["/avisos"], async ({ db }) => {
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const { data, error } = await db.from("avisos_reglas").delete().eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "No tienes permiso para esta operación." };
-    return "Regla eliminada.";
-  });
-}
-
-export async function crearReglasBase(): Promise<Res> {
-  return run(["/avisos"], async ({ db }) => {
-    const { REGLAS_BASE, TIPOS_REGLA } = await import("@/lib/avisos/tipos");
-    const { data: ya } = await db.from("avisos_reglas").select("tipo");
-    const existentes = new Set((ya ?? []).map((r) => r.tipo));
-    const nuevas = REGLAS_BASE.filter((r) => !existentes.has(r.tipo)).map((r) => ({ ...r, parametros: TIPOS_REGLA[r.tipo].params }));
-    if (!nuevas.length) return "Ya existen reglas de todos los tipos recomendados.";
-    const { error } = await db.from("avisos_reglas").insert(nuevas);
-    check(error);
-    return `${nuevas.length} reglas recomendadas creadas (se envían a administradores y responsables de cada finca).`;
-  });
-}
-
-// ---------- tareas y objetivos ----------
+// ---------- tareas ----------
 export async function crearTarea(fd: FormData): Promise<Res> {
   return run(["/calendario", "/"], async ({ db }) => {
     // La fecha y la semana son opcionales: sin ninguna de las dos, la tarea queda pendiente sin fecha.
@@ -558,7 +552,7 @@ export async function crearTarea(fd: FormData): Promise<Res> {
 
 /** Cambia cuándo se hace una tarea: un día concreto, una semana (sin día) o nada (pendiente). */
 export async function asignarTarea(fd: FormData): Promise<Res> {
-  return run(["/calendario", "/avisos", "/"], async ({ db }) => {
+  return run(["/calendario", "/"], async ({ db }) => {
     const id = z.string().uuid().parse(s(fd, "id"));
     const modo = z.enum(["dia", "semana", "nada"]).parse(s(fd, "modo"));
     const fecha = modo === "dia" ? fechaZ.parse(s(fd, "fecha")) : null;
@@ -571,7 +565,7 @@ export async function asignarTarea(fd: FormData): Promise<Res> {
 }
 
 export async function eliminarTarea(fd: FormData): Promise<Res> {
-  return run(["/calendario", "/avisos", "/"], async ({ db }) => {
+  return run(["/calendario", "/"], async ({ db }) => {
     const id = z.string().uuid().parse(s(fd, "id"));
     const { data, error } = await db.from("tareas").delete().eq("id", id).select("id");
     check(error);
@@ -590,8 +584,9 @@ export async function completarTarea(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- objetivos de producción (se usan en Informes) ----------
 export async function crearObjetivo(fd: FormData): Promise<Res> {
-  return run(["/informes", "/avisos"], async ({ db }) => {
+  return run(["/informes"], async ({ db }) => {
     const p = z.object({
       finca_id: z.string().uuid("Elige la finca"), periodo: z.enum(["semanal", "mensual"]), kg: z.number().positive("El objetivo debe ser mayor que 0"),
     }).parse({ finca_id: s(fd, "finca_id"), periodo: s(fd, "periodo"), kg: n(fd, "kg_objetivo") ?? NaN });
