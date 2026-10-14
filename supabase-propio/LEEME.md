@@ -3,7 +3,7 @@
 Instala la versión de código abierto de Supabase con Docker, en este PC. La app de Control de Fincas usa esta base de datos en vez de la nube.
 Misma funcionalidad (login, archivos, permisos por finca); los datos **se quedan en la empresa**, y las copias y el mantenimiento los haces tú.
 
-> **Estado:** estos scripts están escritos con el procedimiento oficial de Supabase (versión `self-hosted/v0.8.2`), pero **aún no se han ejecutado de principio a fin**.
+> **Estado (14/10/2026):** los pasos 1 y 2 están **ejecutados y probados en este PC** (Supabase `self-hosted/v0.8.2`, 11 servicios sanos, 6 migraciones aplicadas, 26 tablas con seguridad por filas, login y permisos comprobados por la API). Quedan los pasos 3-5, que piden contraseña o permisos de administrador.
 > Si algún paso falla, no sigas: copia el mensaje y se corrige.
 
 ## Dónde queda todo
@@ -33,7 +33,7 @@ Al terminar muestra cómo ver las contraseñas del panel y de la base de datos (
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\2_aplicar_migraciones.ps1
 ```
-Aplica `supabase\migrations\0001…0005` en orden, cada una en una transacción. Se puede repetir sin problema: salta las ya aplicadas.
+Aplica `supabase\migrations\0001…0006` en orden, cada una en una transacción. Se puede repetir sin problema: salta las ya aplicadas.
 
 **3. Crear el administrador** (el primer usuario que se crea es administrador)
 ```powershell
@@ -57,7 +57,7 @@ y reinicia la tarea `AppCampo` (o cierra y abre `iniciar.bat`).
 .\abrir_firewall.ps1        # permite que móviles y otros equipos lleguen al puerto 8100 (solo redes privadas)
 .\instalar_copias.ps1       # copia diaria a las 02:00 y 13:00; opcional: -Extra "\\servidor\copias"
 ```
-Comprueba desde **otro equipo** que la base de datos NO está expuesta: `Test-NetConnection <IP-del-PC> -Port 5432` debe fallar.
+La base de datos (5432/6543) ya queda ligada solo a este PC (`127.0.0.1`) por la propia instalación; aun así, comprueba desde **otro equipo** que no es accesible: `Test-NetConnection <IP-del-PC> -Port 5432` debe fallar.
 
 ## Uso diario
 - `iniciar_supabase.bat` / `detener_supabase.bat` (detener **no** borra datos).
