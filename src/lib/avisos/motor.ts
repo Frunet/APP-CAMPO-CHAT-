@@ -84,7 +84,7 @@ async function docPendiente({ db, hoy, fincas }: Ctx): Promise<Cand[]> {
   return (data ?? []).filter((e: any) => ids.has(e.finca_id) && (!e.fecha_esperada || e.fecha_esperada <= hoy)).map((e: any) => ({
     titulo: `Documento pendiente de recibir · ${nombre.get(e.finca_id)}`,
     mensaje: `${e.descripcion}${e.fecha_esperada ? ` (esperado el ${fmt(e.fecha_esperada)})` : ""}`,
-    finca_id: e.finca_id, key: `doc:${e.id}:${lunesDe(hoy)}`, enlace: "/documentos",
+    finca_id: e.finca_id, key: `doc:${e.id}:${lunesDe(hoy)}`, enlace: "/chat",
   }));
 }
 

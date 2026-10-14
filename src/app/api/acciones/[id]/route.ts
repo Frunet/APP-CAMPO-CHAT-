@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO } from "@/lib/demo/config";
 import { aplicarAnulacion, aplicarCorreccion } from "@/lib/chat/correcciones";
+import { aplicarRecepcion } from "@/lib/chat/documentos";
+import { aplicarTarea } from "@/lib/chat/tareas";
 
 const DESTINO: Record<string, string> = {
   registrar_parte: "partes_trabajo",
   registrar_cosecha: "cosechas",
   registrar_gasto: "gastos",
   crear_tarea: "tareas",
+  crear_documento_esperado: "documentos_esperados",
 };
 
 // Confirma o cancela una acción propuesta por el chat.
@@ -43,6 +46,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
     return NextResponse.json({ ok: true, estado: "confirmada", tabla: accion.payload.tabla, registroId: r.id });
+  }
+
+  // Asignar (día / semana / pendiente) o completar una tarea existente
+  if (accion.tipo === "asignar_tarea" || accion.tipo === "completar_tarea") {
+    const r = await aplicarTarea(db, accion.tipo, accion.payload);
+    if (!r.ok) {
+      await db.from("acciones_pendientes").update({ estado: "pendiente", resuelta_at: null }).eq("id", id);
+      return NextResponse.json({ error: r.error }, { status: 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: "tareas", registroId: r.id });
+  }
+
+  // Marcar como recibido un documento esperado
+  if (accion.tipo === "recibir_documento_esperado") {
+    const r = await aplicarRecepcion(db, accion.payload);
+    if (!r.ok) {
+      await db.from("acciones_pendientes").update({ estado: "pendiente", resuelta_at: null }).eq("id", id);
+      return NextResponse.json({ error: r.error }, { status: 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: "documentos_esperados", registroId: r.id });
   }
 
   const tabla = DESTINO[accion.tipo];

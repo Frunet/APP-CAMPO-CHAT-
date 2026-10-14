@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { lunesDe } from "@/lib/tiempo";
 import { esError, resolver, resolverPersonal, type Ref } from "./resolver";
+import { buscarTareas, herramientasTareas, proponerAsignacionTarea, proponerCompletarTarea } from "./tareas";
+import { buscarDocumentos, documentosPendientes, herramientasDocumentos, proponerDocumentoEsperado, proponerRecepcionDocumento, revisarDocumento } from "./documentos";
 import { buscarRegistros, herramientasCorreccion, proponerAnulacion, proponerCorreccion } from "./correcciones";
 import { rendimientoKgHora } from "@/lib/informes";
 
@@ -50,19 +52,6 @@ export const tools: Anthropic.Tool[] = [
     name: "listar_pendientes",
     description: "Devuelve avisos sin resolver, tareas próximas y días recientes sin parte de trabajo registrado.",
     input_schema: { type: "object", properties: { dias: { type: "number", description: "Días hacia atrás/adelante (def. 7)" } } },
-  },
-  {
-    name: "buscar_documentos",
-    description: "Busca documentos subidos por texto (nombre o contenido), tipo y fechas del documento. Devuelve nombre, tipo, estado y enlace.",
-    input_schema: {
-      type: "object",
-      properties: { texto: { type: "string" }, tipo: { type: "string" }, desde: { type: "string" }, hasta: { type: "string" }, finca: { type: "string" } },
-    },
-  },
-  {
-    name: "documentos_pendientes",
-    description: "Lista los documentos esperados que aún no se han recibido (p. ej. de fincas externas) y los gastos sin documento justificativo.",
-    input_schema: { type: "object", properties: { finca: { type: "string" } } },
   },
   {
     name: "proponer_parte_trabajo",
@@ -125,7 +114,7 @@ export const tools: Anthropic.Tool[] = [
     description:
       "Prepara (NO guarda) una tarea o recordatorio para confirmación. Puede tener un día concreto (fecha), " +
       "estar asignada solo a una semana (semana: cualquier fecha de esa semana) o quedar pendiente sin fecha. " +
-      "No preguntes la fecha si el usuario no la da: sin fecha ni semana queda pendiente y se asigna luego en el calendario.",
+      "No preguntes la fecha si el usuario no la da: sin día ni semana la tarea queda PENDIENTE DE ASIGNAR y se asigna después por el chat (proponer_asignacion_tarea). Si el usuario da varias tareas, crea una propuesta por cada una.",
     input_schema: {
       type: "object",
       properties: {
@@ -140,7 +129,7 @@ export const tools: Anthropic.Tool[] = [
 
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fecha debe ser YYYY-MM-DD");
 
-tools.push(...herramientasCorreccion);
+tools.push(...herramientasCorreccion, ...herramientasDocumentos, ...herramientasTareas);
 
 // ---------- Ejecución ----------
 export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): Promise<unknown> {
@@ -253,29 +242,22 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         for (let d = new Date(desde); d <= hoy; d = new Date(d.getTime() + 864e5)) if (!conParte.has(iso(d))) sinParte.push(iso(d));
         return { avisos: avisos.data, tareas: tareas.data, tareas_sin_dia: sinDia.data /* semana_inicio nulo = pendiente sin fecha */, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
       }
-      case "buscar_documentos": {
-        const ref = await resolver(db, input?.finca);
-        if (esError(ref)) return ref;
-        let q = db.from("documentos").select("id,nombre,tipo,estado,fecha_documento,fincas(nombre)").order("created_at", { ascending: false }).limit(20);
-        if (ref.finca_id) q = q.eq("finca_id", ref.finca_id);
-        if (input?.tipo) q = q.eq("tipo", String(input.tipo));
-        if (input?.desde) q = q.gte("fecha_documento", fecha.parse(input.desde));
-        if (input?.hasta) q = q.lte("fecha_documento", fecha.parse(input.hasta));
-        const t = String(input?.texto ?? "").replace(/[%*,()\\]/g, " ").trim();
-        if (t) q = q.or(`nombre.ilike.%${t}%,texto_extraido.ilike.%${t}%`);
-        const { data, error } = await q;
-        if (error) return { error: error.message };
-        return { encontrados: (data ?? []).map((d: any) => ({ nombre: d.nombre, tipo: d.tipo, estado: d.estado, fecha_documento: d.fecha_documento, finca: d.fincas?.nombre, enlace: `/documentos/${d.id}` })) };
-      }
-      case "documentos_pendientes": {
-        const ref = await resolver(db, input?.finca);
-        if (esError(ref)) return ref;
-        let e = db.from("documentos_esperados").select("descripcion,tipo,fecha_esperada,fincas(nombre)").is("documento_id", null).order("fecha_esperada");
-        let g = db.from("gastos").select("fecha,importe,moneda,categoria,proveedor,fincas(nombre)").is("documento_id", null).eq("tipo_importe", "registrado").order("fecha", { ascending: false }).limit(50);
-        if (ref.finca_id) { e = e.eq("finca_id", ref.finca_id); g = g.eq("finca_id", ref.finca_id); }
-        const [esp, gas] = await Promise.all([e, g]);
-        return { documentos_esperados_sin_recibir: esp.data ?? [], gastos_sin_justificar: gas.data ?? [], fecha_hoy: new Date().toISOString().slice(0, 10) };
-      }
+      case "buscar_tareas":
+        return await buscarTareas(input, ctx);
+      case "proponer_asignacion_tarea":
+        return await proponerAsignacionTarea(input, ctx);
+      case "proponer_completar_tarea":
+        return await proponerCompletarTarea(input, ctx);
+      case "buscar_documentos":
+        return await buscarDocumentos(input, ctx);
+      case "documentos_pendientes":
+        return await documentosPendientes(input, ctx);
+      case "revisar_documento":
+        return await revisarDocumento(input, ctx);
+      case "proponer_documento_esperado":
+        return await proponerDocumentoEsperado(input, ctx);
+      case "proponer_recepcion_documento":
+        return await proponerRecepcionDocumento(input, ctx);
       case "buscar_registros":
         return await buscarRegistros(input, ctx);
       case "proponer_correccion":
@@ -354,7 +336,7 @@ async function proponer(name: string, i: any, ctx: Ctx) {
       titulo: i.titulo, fecha: i.fecha ?? null, semana_inicio: semana, finca_id: ref.finca_id ?? null, parcela_id: ref.parcela_id ?? null,
       tipo: i.tipo ?? "recordatorio", descripcion: i.descripcion ?? null, origen: "chat",
     };
-    const cuando = i.fecha ? i.fecha : semana ? `semana del ${semana.slice(8)}/${semana.slice(5, 7)}` : "sin fecha (pendiente)";
+    const cuando = i.fecha ? i.fecha : semana ? `semana del ${semana.slice(8)}/${semana.slice(5, 7)}` : "pendiente de asignar (sin día ni semana)";
     resumen = `Tarea · ${cuando}${ref.finca ? ` · ${lugar}` : ""}\n${i.titulo}`;
   }
 

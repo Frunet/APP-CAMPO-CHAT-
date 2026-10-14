@@ -327,18 +327,6 @@ const CATEGORIAS = z.enum(["mano_obra", "insumos", "maquinaria", "combustible", 
 const TIPOS_IMPORTE = z.enum(["registrado", "presupuesto", "estimacion", "prevision"]);
 
 // ---------- documentos ----------
-export async function actualizarDocumento(fd: FormData): Promise<Res> {
-  return run(["/documentos"], async ({ db }) => {
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const { data, error } = await db.from("documentos").update({
-      tipo: s(fd, "tipo") ?? "otro", finca_id: s(fd, "finca_id"), parcela_id: s(fd, "parcela_id"),
-      campana_id: s(fd, "campana_id"), fecha_documento: s(fd, "fecha_documento"),
-    }).eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "No tienes permiso para modificar este documento." };
-    return "Documento actualizado.";
-  });
-}
 
 const filaBase = { fecha: fechaZ, parcela_id: z.string().uuid().nullable() };
 const FILAS = {
@@ -358,7 +346,7 @@ const FILAS = {
 
 /** Importa SOLO las filas que el usuario ha revisado y marcado. Cada fila se valida y se inserta con RLS. */
 export async function importarRegistros(fd: FormData): Promise<Res> {
-  return run(["/documentos", "/gastos", "/cosechas", "/trabajo", "/"], async ({ db }) => {
+  return run(["/chat", "/gastos", "/cosechas", "/trabajo", "/"], async ({ db }) => {
     const documento_id = z.string().uuid().parse(s(fd, "documento_id"));
     const finca_id = z.string().uuid("Elige la finca del documento").parse(s(fd, "finca_id"));
     const filas = z.array(z.object({ idx: z.number().int().min(0), tipo: z.enum(["gasto", "cosecha", "parte"]), datos: z.record(z.any()) }))
@@ -397,35 +385,12 @@ export async function importarRegistros(fd: FormData): Promise<Res> {
 }
 
 export async function descartarDocumento(fd: FormData): Promise<Res> {
-  return run(["/documentos"], async ({ db }) => {
+  return run(["/chat"], async ({ db }) => {
     const id = z.string().uuid().parse(s(fd, "id"));
     const { data, error } = await db.from("documentos").update({ estado: "descartado" }).eq("id", id).neq("estado", "importado").select("id");
     check(error);
     if (!data?.length) throw { message: "No se pudo descartar (¿ya importado o sin permiso?). El archivo original se conserva." };
     return "Extracción descartada; el archivo original se conserva.";
-  });
-}
-
-// ---------- documentos esperados (pendientes de recibir) ----------
-export async function crearEsperado(fd: FormData): Promise<Res> {
-  return run(["/documentos"], async ({ db }) => {
-    const p = z.object({ finca_id: z.string().uuid("Elige la finca"), descripcion: z.string().min(1, "Describe el documento") })
-      .parse({ finca_id: s(fd, "finca_id"), descripcion: s(fd, "descripcion") ?? "" });
-    const { error } = await db.from("documentos_esperados").insert({ ...p, tipo: s(fd, "tipo") ?? "otro", fecha_esperada: s(fd, "fecha_esperada") });
-    check(error);
-    return "Documento pendiente anotado.";
-  });
-}
-
-export async function recibirEsperado(fd: FormData): Promise<Res> {
-  return run(["/documentos"], async ({ db }) => {
-    const id = z.string().uuid().parse(s(fd, "id"));
-    const documento_id = z.string().uuid("Elige el documento recibido").parse(s(fd, "documento_id"));
-    const { data, error } = await db.from("documentos_esperados")
-      .update({ documento_id, recibido_at: new Date().toISOString() }).eq("id", id).select("id");
-    check(error);
-    if (!data?.length) throw { message: "No tienes permiso para esta operación en esa finca." };
-    return "Marcado como recibido.";
   });
 }
 

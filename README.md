@@ -28,7 +28,7 @@ Carpeta `supabase-propio/`: instalación guiada en 4 pasos (`1_instalar`, `2_apl
 5. `npm run dev`
 
 ## Cómo se introducen los datos
-- **Trabajo y horas, Cosechas y Gastos son de solo consulta** (pantalla con filtros y descarga en Excel/PDF). Los registros se hacen desde el **chat** o importándolos desde **Documentos**. Para **corregir o anular** un parte, cosecha o gasto se pide al chat («corrige el parte de ayer», «anula esta cosecha»): enseña el antes y el después, solo cambia al confirmar, comprueba que el registro no haya cambiado entretanto y deja el cambio en el historial. Anular lo pueden hacer solo responsables y administradores.
+- **Trabajo y horas, Cosechas y Gastos son de solo consulta** (pantalla con filtros y descarga en Excel/PDF). Los registros se hacen desde el **chat** o adjuntando un documento en el chat (no hay módulo Documentos: el chat lo lee, lo enseña en una tarjeta de revisión y se importa fila a fila). Las **tareas del calendario** también se crean y se asignan por el chat; las que no tienen día ni semana quedan «pendientes de asignar». Para **corregir o anular** un parte, cosecha o gasto se pide al chat («corrige el parte de ayer», «anula esta cosecha»): enseña el antes y el después, solo cambia al confirmar, comprueba que el registro no haya cambiado entretanto y deja el cambio en el historial. Anular lo pueden hacer solo responsables y administradores.
 - **Maestros** (solo administrador): usuarios y fincas asignadas, fincas → parcelas → lotes (opcionales), catálogo de cultivos, personal con costes (tarifa normal / extra / festivo, condiciones propias por trabajador) y festivos.
 
 ## Principios de diseño

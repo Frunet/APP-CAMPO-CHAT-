@@ -85,7 +85,7 @@ export default async function Gastos({ searchParams }: { searchParams: Promise<R
                 <td className="td">{nombreCat[r.categoria]}</td><td className="td">{[r.proveedor, r.concepto].filter(Boolean).join(" · ") || "—"}</td>
                 <td className="td font-medium">{num(r.importe, 2)} {r.moneda}</td>
                 <td className="td text-xs">{nombreTipo[r.tipo_importe]}</td>
-                <td className="td">{r.documento_id ? <Link href={`/documentos/${r.documento_id}`} className="text-brand-700">📎</Link> : <span className="text-xs text-amber-600">sin justificar</span>}</td>
+                <td className="td">{r.documento_id ? <Link href={`/api/documentos/${r.documento_id}/descargar`} className="text-brand-700" title="Descargar el documento original">📎</Link> : <span className="text-xs text-amber-600">sin justificar</span>}</td>
                 <td className="td"><Link className="text-brand-700" href={`/gastos/${r.id}`}>Detalle</Link></td>
               </tr>
             ))}

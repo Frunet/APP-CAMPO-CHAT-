@@ -24,7 +24,7 @@ export default async function DetalleGasto({ params }: { params: Promise<{ id: s
           ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Lote", r.lotes?.codigo], ["Categoría", cat[r.categoria] ?? r.categoria], ["Proveedor", r.proveedor],
           ["Concepto", r.concepto], ["Importe", `${num(r.importe, 2)} ${r.moneda}`], ["Naturaleza del importe", tipo[r.tipo_importe] ?? r.tipo_importe],
           ["Campaña", r.campanas?.nombre],
-          ["Documento justificativo", r.documento_id ? <Link key="d" href={`/documentos/${r.documento_id}`} className="text-brand-700">📎 Ver documento</Link> : "Sin justificar"],
+          ["Documento justificativo", r.documento_id ? <Link key="d" href={`/api/documentos/${r.documento_id}/descargar`} className="text-brand-700">📎 Descargar el documento</Link> : "Sin justificar"],
           ["Observaciones", r.observaciones],
         ]} />
       </div>

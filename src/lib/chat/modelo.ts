@@ -4,7 +4,7 @@ export const MODELO_COMPLEJO = process.env.CHAT_MODEL_COMPLEX ?? "claude-sonnet-
 
 // Órdenes explícitas de escritura: cuentan siempre, aunque el mensaje parezca pregunta
 const ORDEN =
-  /\b(registr\w*|anot\w*|apunt\w*|guard\w*|a[ñn]ad\w*|cre[ae]\w*|adjunt\w*|corrig\w*|modific\w*|elimin\w*|borr\w*|cancel\w*|av[ií]sa\w*|recu[eé]rda\w*|programa\w*|recordatorio|anul\w*|rectific\w*|equivoc\w*|cambi(?:a|ar|alo|ala)\b)/i;
+  /\b(registr\w*|anot\w*|apunt\w*|guard\w*|a[ñn]ad\w*|cre[ae]\w*|adjunt\w*|corrig\w*|modific\w*|elimin\w*|borr\w*|cancel\w*|av[ií]sa\w*|recu[eé]rda\w*|programa\w*|recordatorio|anul\w*|rectific\w*|equivoc\w*|marc(?:a|ar|alo|ala)\b|asign\w*|reasign\w*|mueve\w*|mover\w*|aplaz\w*|posp\w*|esperamos|esperar\w*|cambi(?:a|ar|alo|ala)\b)/i;
 
 // Relatos de trabajo/cosecha y cifras con unidades: solo cuentan si NO es una pregunta
 const RELATO =

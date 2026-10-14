@@ -1,9 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import RevisionDocumento from "./RevisionDocumento";
 
 type Accion = { id: string; resumen: string; tipo?: string; estado: "pendiente" | "confirmada" | "cancelada" | "caducada"; error?: string };
-type Msg = { id: string; rol: "user" | "assistant"; texto: string; acciones?: Accion[]; enlace?: string };
+type Msg = { id: string; rol: "user" | "assistant"; texto: string; acciones?: Accion[]; enlace?: string; documentos?: string[] };
 type Conv = { id: string; titulo: string | null; updated_at: string };
 
 export default function ChatClient() {
@@ -69,7 +70,7 @@ export default function ChatClient() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Error");
       setConvId(j.conversacionId); refs.current.convId = j.conversacionId;
-      setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: j.texto, acciones: j.acciones.map((a: any) => ({ ...a, estado: "pendiente" })) }]);
+      setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: j.texto, acciones: j.acciones.map((a: any) => ({ ...a, estado: "pendiente" })), documentos: j.documentos ?? [] }]);
       cargarConvs();
       if (refs.current.leer || refs.current.manos) {
         const aviso = j.acciones.length ? ` Hay ${j.acciones.length} registro${j.acciones.length > 1 ? "s" : ""} pendiente${j.acciones.length > 1 ? "s" : ""} de confirmar. Confírmalo con el botón de la pantalla.` : "";
@@ -98,14 +99,24 @@ export default function ChatClient() {
       const fd = new FormData(); fd.append("archivo", file);
       const r = await fetch("/api/documentos", { method: "POST", body: fd });
       const j = await r.json();
+      let docId: string | undefined = j.id;
       if (!r.ok) {
-        return nuevo({ rol: "assistant", texto: `⚠️ ${j.error}`, enlace: j.duplicadoId ? `/documentos/${j.duplicadoId}` : undefined });
+        if (!j.duplicadoId) return nuevo({ rol: "assistant", texto: `⚠️ ${j.error}` });
+        docId = j.duplicadoId; // ya estaba subido: se enseña el que existe
+        nuevo({ rol: "assistant", texto: `⚠️ ${j.error}` });
+      } else {
+        nuevo({ rol: "assistant", texto: "Archivo guardado. Leyendo el documento…" });
+        const p = await fetch(`/api/documentos/${j.id}/procesar`, { method: "POST" });
+        const pj = await p.json();
+        if (!p.ok) nuevo({ rol: "assistant", texto: `Guardé el original pero no pude leerlo: ${pj.error}`, documentos: [j.id] });
       }
-      const p = await fetch(`/api/documentos/${j.id}/procesar`, { method: "POST" });
-      const pj = await p.json();
-      nuevo(p.ok
-        ? { rol: "assistant", texto: `He guardado el original y leído «${file.name}»: ${pj.n} registro(s) detectado(s). No se ha registrado nada todavía: revisa y corrige los datos antes de importarlos.`, enlace: `/documentos/${j.id}` }
-        : { rol: "assistant", texto: `Archivo guardado, pero no pude leerlo: ${pj.error}`, enlace: `/documentos/${j.id}` });
+      // Constancia en la conversación (para que el asistente sepa de qué documento se habla) + tarjeta de revisión
+      const c = await fetch("/api/chat/documento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conversacionId: refs.current.convId, documentoId: docId }) });
+      const cj = await c.json();
+      if (c.ok) {
+        setConvId(cj.conversacionId); refs.current.convId = cj.conversacionId; cargarConvs();
+        nuevo({ rol: "assistant", texto: cj.texto, documentos: [docId!] });
+      } else nuevo({ rol: "assistant", texto: "", documentos: [docId!] });
     } catch { nuevo({ rol: "assistant", texto: "⚠️ Error de conexión al subir el archivo." }); }
     finally { setEnviando(false); }
   }
@@ -173,23 +184,24 @@ export default function ChatClient() {
         )}
         {msgs.map((m) => (
           <div key={m.id} className={`flex ${m.rol === "user" ? "justify-end" : ""}`}>
-            <div className={`max-w-[85%] space-y-2 rounded-2xl px-3 py-2 text-sm ${m.rol === "user" ? "bg-brand-600 text-white" : "bg-stone-100"}`}>
+            <div className={`${m.documentos?.length ? "w-full" : "max-w-[85%]"} space-y-2 rounded-2xl px-3 py-2 text-sm ${m.rol === "user" ? "bg-brand-600 text-white" : "bg-stone-100"}`}>
               <p className="whitespace-pre-wrap">{m.texto}</p>
-              {m.enlace && <a href={m.enlace} className="btn !px-3 !py-1">Revisar documento →</a>}
+              {m.enlace && <a href={m.enlace} className="btn !px-3 !py-1">Abrir →</a>}
+              {m.documentos?.map((d) => <RevisionDocumento key={d} id={d} />)}
               {m.acciones?.map((a) => (
                 <div key={a.id} className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-stone-900">
                   <p className="whitespace-pre-wrap text-xs font-medium">{a.resumen}</p>
                   {a.estado === "pendiente" ? (
                     <div className="mt-2 flex gap-2">
                       <button className={a.tipo === "anular_registro" ? "btn !bg-red-700 !px-3 !py-1 hover:!bg-red-800" : "btn !px-3 !py-1"} onClick={() => decidir(m.id, a.id, "confirmar")}>
-                        {a.tipo === "anular_registro" ? "🗑 Confirmar anulación" : a.tipo === "corregir_registro" ? "✔ Confirmar corrección" : "✔ Confirmar y guardar"}
+                        {a.tipo === "anular_registro" ? "🗑 Confirmar anulación" : a.tipo === "corregir_registro" ? "✔ Confirmar corrección" : a.tipo === "asignar_tarea" ? "📅 Confirmar asignación" : "✔ Confirmar y guardar"}
                       </button>
                       <button className="btn-ghost !px-3 !py-1" onClick={() => decidir(m.id, a.id, "cancelar")}>✕ Cancelar</button>
                     </div>
                   ) : (
                     <p className={`mt-1 text-xs font-semibold ${a.estado === "confirmada" ? "text-green-700" : a.estado === "caducada" ? "text-amber-700" : "text-stone-500"}`}>
                       {a.estado === "confirmada"
-                        ? a.tipo === "anular_registro" ? "✔ Registro anulado (queda en el historial)" : a.tipo === "corregir_registro" ? "✔ Corrección guardada (queda en el historial)" : "✔ Guardado en la base de datos"
+                        ? a.tipo === "anular_registro" ? "✔ Registro anulado (queda en el historial)" : a.tipo === "corregir_registro" ? "✔ Corrección guardada (queda en el historial)" : a.tipo === "asignar_tarea" ? "✔ Tarea asignada en el calendario" : "✔ Guardado en la base de datos"
                         : a.estado === "caducada" ? "El registro cambió desde que se propuso: vuelve a pedirlo desde el chat." : "Cancelado"}
                     </p>
                   )}

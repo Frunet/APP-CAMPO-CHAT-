@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 
-const MODEL = "claude-sonnet-5-5";
+const MODEL = process.env.DOC_MODEL ?? "claude-sonnet-5-5"; // en pruebas: DOC_MODEL=claude-haiku-5-5
 const MAX_TEXTO_ENTRADA = 60_000;   // caracteres de hoja/Word que se envían al modelo
 const MAX_TEXTO_GUARDADO = 40_000;  // texto guardado para búsqueda
 const MAX_IMAGEN = 5 * 1024 * 1024; // límite de la API para imágenes
