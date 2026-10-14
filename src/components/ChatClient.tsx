@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-type Accion = { id: string; resumen: string; estado: "pendiente" | "confirmada" | "cancelada"; error?: string };
+type Accion = { id: string; resumen: string; tipo?: string; estado: "pendiente" | "confirmada" | "cancelada" | "caducada"; error?: string };
 type Msg = { id: string; rol: "user" | "assistant"; texto: string; acciones?: Accion[]; enlace?: string };
 type Conv = { id: string; titulo: string | null; updated_at: string };
 
@@ -39,7 +39,7 @@ export default function ChatClient() {
     setConvId(id); setHistorial(false);
     const [{ data: m }, { data: acc }] = await Promise.all([
       db.from("chat_mensajes").select("id,rol,texto").eq("conversacion_id", id).not("texto", "is", null).order("created_at"),
-      db.from("acciones_pendientes").select("id,resumen,estado").eq("conversacion_id", id).order("created_at"),
+      db.from("acciones_pendientes").select("id,resumen,tipo,estado").eq("conversacion_id", id).order("created_at"),
     ]);
     const pend = (acc ?? []) as Accion[];
     setMsgs([
@@ -86,7 +86,7 @@ export default function ChatClient() {
   async function decidir(mid: string, aid: string, decision: "confirmar" | "cancelar") {
     const r = await fetch(`/api/acciones/${aid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision }) });
     const j = await r.json();
-    setMsgs((x) => x.map((m) => m.id !== mid ? m : { ...m, acciones: m.acciones?.map((a) => a.id !== aid ? a : r.ok ? { ...a, estado: j.estado, error: undefined } : { ...a, error: j.error }) }));
+    setMsgs((x) => x.map((m) => m.id !== mid ? m : { ...m, acciones: m.acciones?.map((a) => a.id !== aid ? a : r.ok ? { ...a, estado: j.estado, error: undefined } : j.caducada ? { ...a, estado: "caducada" as const, error: undefined } : { ...a, error: j.error }) }));
   }
 
   const adjunto = useRef<HTMLInputElement>(null);
@@ -181,12 +181,16 @@ export default function ChatClient() {
                   <p className="whitespace-pre-wrap text-xs font-medium">{a.resumen}</p>
                   {a.estado === "pendiente" ? (
                     <div className="mt-2 flex gap-2">
-                      <button className="btn !px-3 !py-1" onClick={() => decidir(m.id, a.id, "confirmar")}>✔ Confirmar y guardar</button>
+                      <button className={a.tipo === "anular_registro" ? "btn !bg-red-700 !px-3 !py-1 hover:!bg-red-800" : "btn !px-3 !py-1"} onClick={() => decidir(m.id, a.id, "confirmar")}>
+                        {a.tipo === "anular_registro" ? "🗑 Confirmar anulación" : a.tipo === "corregir_registro" ? "✔ Confirmar corrección" : "✔ Confirmar y guardar"}
+                      </button>
                       <button className="btn-ghost !px-3 !py-1" onClick={() => decidir(m.id, a.id, "cancelar")}>✕ Cancelar</button>
                     </div>
                   ) : (
-                    <p className={`mt-1 text-xs font-semibold ${a.estado === "confirmada" ? "text-green-700" : "text-stone-500"}`}>
-                      {a.estado === "confirmada" ? "✔ Guardado en la base de datos" : "Cancelado"}
+                    <p className={`mt-1 text-xs font-semibold ${a.estado === "confirmada" ? "text-green-700" : a.estado === "caducada" ? "text-amber-700" : "text-stone-500"}`}>
+                      {a.estado === "confirmada"
+                        ? a.tipo === "anular_registro" ? "✔ Registro anulado (queda en el historial)" : a.tipo === "corregir_registro" ? "✔ Corrección guardada (queda en el historial)" : "✔ Guardado en la base de datos"
+                        : a.estado === "caducada" ? "El registro cambió desde que se propuso: vuelve a pedirlo desde el chat." : "Cancelado"}
                     </p>
                   )}
                   {a.error && <p className="mt-1 text-xs text-red-600">{a.error}</p>}

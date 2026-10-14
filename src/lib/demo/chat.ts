@@ -10,8 +10,22 @@ export function respuestaDemo(mensaje: string) {
   const hoy = new Date();
   const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
   const desde = iso(lunes), hasta = iso(hoy);
-  const base = { conversacionId: "00000000-0000-4000-8000-000000000132", modelo: "demo", acciones: [] as { id: string; resumen: string }[] };
+  const base = { conversacionId: "00000000-0000-4000-8000-000000000132", modelo: "demo", acciones: [] as { id: string; resumen: string; tipo?: string }[] };
 
+  if (/anul|elimin|borra/.test(m)) {
+    return {
+      ...base,
+      texto: "Esto es una demostración: así prepararía la anulación. Se elimina el registro y queda constancia en el historial. Pulsa Confirmar para anularlo (aquí no se cambia nada).",
+      acciones: [{ id: "00000000-0000-4000-8000-0000000000ab", tipo: "anular_registro", resumen: "Anular cosecha\n13/10/2026 · Finca El Mango · parcela P3 · Mango Osteen · 2.140 kg\nMotivo: duplicada\nSe eliminará de la base de datos y quedará constancia en el historial." }],
+    };
+  }
+  if (/corrig|cambia|rectific|equivoc/.test(m)) {
+    return {
+      ...base,
+      texto: "Esto es una demostración: así prepararía la corrección, enseñando el antes y el después. Pulsa Confirmar para aplicarla (aquí no se cambia nada).",
+      acciones: [{ id: "00000000-0000-4000-8000-0000000000ac", tipo: "corregir_registro", resumen: "Corrección de parte de trabajo\n13/10/2026 · Finca El Mango · parcela P2 · 6 persona(s) × 7,7 h · Recolección\n• Horas por persona: 7,7 → 8\n• Horas extra por persona: — → 1\nEl coste se recalculará con las tarifas." }],
+    };
+  }
   if (/registr|han trabajado|hemos|apunta|anota|cosecha del/.test(m)) {
     return {
       ...base,

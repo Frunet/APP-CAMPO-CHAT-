@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO } from "@/lib/demo/config";
+import { aplicarAnulacion, aplicarCorreccion } from "@/lib/chat/correcciones";
 
 const DESTINO: Record<string, string> = {
   registrar_parte: "partes_trabajo",
@@ -31,6 +32,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     .select("tipo,payload").maybeSingle();
   if (!accion) return NextResponse.json({ error: "La acción ya no está pendiente." }, { status: 409 });
   if (decision === "cancelar") return NextResponse.json({ ok: true, estado: "cancelada" });
+
+  // Corregir o anular un registro existente (con comprobación de que no ha cambiado desde la propuesta)
+  if (accion.tipo === "corregir_registro" || accion.tipo === "anular_registro") {
+    const r = accion.tipo === "corregir_registro" ? await aplicarCorreccion(db, accion.payload) : await aplicarAnulacion(db, accion.payload);
+    if (!r.ok) {
+      await db.from("acciones_pendientes")
+        .update(r.caducada ? { estado: "caducada", resuelta_at: new Date().toISOString() } : { estado: "pendiente", resuelta_at: null }).eq("id", id);
+      return NextResponse.json({ error: r.error, caducada: !!r.caducada }, { status: r.caducada ? 409 : 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: accion.payload.tabla, registroId: r.id });
+  }
 
   const tabla = DESTINO[accion.tipo];
   const { data: reg, error } = await db.from(tabla).insert(accion.payload).select("id").single();
