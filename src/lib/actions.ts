@@ -293,6 +293,55 @@ export async function actualizarProveedor(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- identificadores de finca y empresas propias (para leer facturas) ----------
+const TIPOS_IDENT = ["alias", "catastro", "direccion", "cups", "contador", "matricula", "otro"] as const;
+const RUTAS_FACT = ["/maestros", "/chat"];
+
+export async function crearIdentificadorFinca(fd: FormData): Promise<Res> {
+  return run(RUTAS_FACT, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ finca_id: z.string().uuid("Elige la finca"), tipo: z.enum(TIPOS_IDENT, { message: "Elige el tipo" }), valor: z.string().min(2, "Escribe el identificador") })
+      .parse({ finca_id: s(fd, "finca_id"), tipo: s(fd, "tipo"), valor: s(fd, "valor") ?? "" });
+    const valor_norm = p.valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (valor_norm.length < 2) throw { message: "El identificador es demasiado corto o no tiene letras ni números." };
+    const { error } = await db.from("finca_identificadores").insert({ ...p, valor: p.valor, valor_norm });
+    check(error);
+    return "Identificador guardado.";
+  });
+}
+
+export async function eliminarIdentificadorFinca(fd: FormData): Promise<Res> {
+  return run(RUTAS_FACT, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("finca_identificadores").delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo eliminar." };
+    return "Identificador eliminado.";
+  });
+}
+
+export async function crearEmpresaPropia(fd: FormData): Promise<Res> {
+  return run(RUTAS_FACT, async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({ nombre: z.string().min(1, "Falta el nombre"), nif: z.string().min(5, "Falta el NIF/CIF") }).parse({ nombre: s(fd, "nombre") ?? "", nif: s(fd, "nif") ?? "" });
+    const { error } = await db.from("empresas_propias").insert(p);
+    check(error);
+    return "Empresa guardada.";
+  });
+}
+
+export async function eliminarEmpresaPropia(fd: FormData): Promise<Res> {
+  return run(RUTAS_FACT, async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("empresas_propias").delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo eliminar." };
+    return "Empresa eliminada.";
+  });
+}
+
 // Catálogo de cultivos y variedades
 export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {
@@ -472,6 +521,12 @@ const FILAS = {
   gasto: z.object({
     ...filaBase, categoria: CATEGORIAS, importe: z.number().min(0), moneda: z.string().length(3),
     tipo_importe: TIPOS_IMPORTE, proveedor: z.string().nullable(), concepto: z.string().nullable(),
+    numero_factura: z.string().nullable().optional(), proveedor_nif: z.string().nullable().optional(), iva_importe: z.number().nullable().optional(),
+    categoria_resultado: z.string().nullable().optional(),
+  }),
+  venta: z.object({
+    fecha: fechaZ, importe: z.number().min(0), cliente: z.string().nullable(), numero_factura: z.string().nullable(), cliente_nif: z.string().nullable().optional(),
+    iva_importe: z.number().nullable().optional(), observaciones: z.string().nullable().optional(),
   }),
   cosecha: z.object({
     ...filaBase, parcela_id: z.string().uuid("Elige la parcela"), cultivo: z.string().min(1), variedad: z.string().nullable(),
@@ -485,10 +540,10 @@ const FILAS = {
 
 /** Importa SOLO las filas que el usuario ha revisado y marcado. Cada fila se valida y se inserta con RLS. */
 export async function importarRegistros(fd: FormData): Promise<Res> {
-  return run(["/chat", "/gastos", "/cosechas", "/trabajo", "/"], async ({ db }) => {
+  return run(["/chat", "/gastos", "/cosechas", "/trabajo", "/resultados", "/"], async ({ db }) => {
     const documento_id = z.string().uuid().parse(s(fd, "documento_id"));
-    const finca_id = z.string().uuid("Elige la finca del documento").parse(s(fd, "finca_id"));
-    const filas = z.array(z.object({ idx: z.number().int().min(0), tipo: z.enum(["gasto", "cosecha", "parte"]), datos: z.record(z.any()) }))
+    const fincaDoc = z.string().uuid().nullable().parse(s(fd, "finca_id"));
+    const filas = z.array(z.object({ idx: z.number().int().min(0), tipo: z.enum(["gasto", "venta", "cosecha", "parte"]), finca_id: z.string().uuid().nullable().optional(), datos: z.record(z.any()) }))
       .min(1, "Marca al menos una fila").parse(JSON.parse(s(fd, "filas") ?? "[]"));
 
     const { data: doc } = await db.from("documentos").select("datos_extraidos,campana_id").eq("id", documento_id).single();
@@ -497,13 +552,46 @@ export async function importarRegistros(fd: FormData): Promise<Res> {
     const hechos: number[] = [];
     const fallos: string[] = [];
 
+    const regs: any[] = doc.datos_extraidos?.registros ?? [];
+    // nº de línea dentro de su factura (para no duplicar una factura ya registrada)
+    const lineaDe = (idx: number) => {
+      const r = regs[idx]; if (!r?.numero_factura) return null;
+      const mismo = (x: any) => x?.numero_factura === r.numero_factura && (x?.emisor_nif ?? x?.proveedor ?? null) === (r.emisor_nif ?? r.proveedor ?? null);
+      return regs.slice(0, idx + 1).filter(mismo).length;
+    };
+    // ventas de una misma factura y finca: una sola fila con la suma (una factura emitida es única por finca)
+    const ventas = new Map<string, { f: (typeof filas)[number]; idxs: number[]; importe: number; iva: number | null }>();
+    const resto: typeof filas = [];
     for (const f of filas) {
+      if (f.tipo !== "venta") { resto.push(f); continue; }
+      const fin = f.finca_id ?? fincaDoc;
+      const num = String(f.datos.numero_factura ?? "").trim().toLowerCase();
+      const k = num && fin ? `${fin}|${num}` : `solo|${f.idx}`;
+      const g = ventas.get(k);
+      const imp = Number(f.datos.importe) || 0, iva = f.datos.iva_importe == null ? null : Number(f.datos.iva_importe);
+      if (g) { g.idxs.push(f.idx); g.importe += imp; g.iva = g.iva == null || iva == null ? null : g.iva + iva; }
+      else ventas.set(k, { f, idxs: [f.idx], importe: imp, iva });
+    }
+    for (const g of ventas.values()) {
+      const idx0 = g.idxs[0];
+      if (g.idxs.every((i) => ya.has(i))) { fallos.push(`Fila ${idx0 + 1}: ya importada.`); continue; }
+      const fin = g.f.finca_id ?? fincaDoc;
+      if (!fin) { fallos.push(`Fila ${idx0 + 1}: elige la finca.`); continue; }
+      const v = FILAS.venta.safeParse({ ...g.f.datos, importe: Math.round(g.importe * 100) / 100, iva_importe: g.iva == null ? null : Math.round(g.iva * 100) / 100 });
+      if (!v.success) { fallos.push(`Fila ${idx0 + 1}: ${v.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join(", ")}`); continue; }
+      const { error } = await db.from("ventas").insert({ ...v.data, finca_id: fin, campana_id: doc.campana_id, documento_id });
+      if (error) fallos.push(`Fila ${idx0 + 1}: ${msgError(error)}`); else hechos.push(...g.idxs);
+    }
+
+    for (const f of resto) {
       if (ya.has(f.idx)) { fallos.push(`Fila ${f.idx + 1}: ya importada.`); continue; }
-      const v = FILAS[f.tipo].safeParse(f.datos);
+      const finca_id = f.finca_id ?? fincaDoc;
+      if (!finca_id) { fallos.push(`Fila ${f.idx + 1}: elige la finca.`); continue; }
+      const v = FILAS[f.tipo as "gasto" | "cosecha" | "parte"].safeParse(f.datos);
       if (!v.success) { fallos.push(`Fila ${f.idx + 1}: ${v.error.issues.map((i) => `${i.path.join(".")} ${i.message}`).join(", ")}`); continue; }
       const d: any = v.data;
       let error;
-      if (f.tipo === "gasto") ({ error } = await db.from("gastos").insert({ ...d, finca_id, campana_id: doc.campana_id, documento_id }));
+      if (f.tipo === "gasto") ({ error } = await db.from("gastos").insert({ ...d, finca_id, campana_id: doc.campana_id, documento_id, linea: lineaDe(f.idx) }));
       else if (f.tipo === "cosecha") ({ error } = await db.from("cosechas").insert({ ...d, finca_id, campana_id: doc.campana_id, origen: "documento" }));
       else ({ error } = await db.from("partes_trabajo").insert({ ...d, finca_id, origen: "documento" }));
       if (error) fallos.push(`Fila ${f.idx + 1}: ${msgError(error)}`);
@@ -514,12 +602,27 @@ export async function importarRegistros(fd: FormData): Promise<Res> {
       const total = (doc.datos_extraidos?.registros ?? []).length;
       const importados = [...ya, ...hechos];
       await db.from("documentos").update({
-        finca_id, datos_extraidos: { ...doc.datos_extraidos, importados },
+        finca_id: fincaDoc, datos_extraidos: { ...doc.datos_extraidos, importados },
         estado: importados.length >= total ? "importado" : "revisado",
       }).eq("id", documento_id);
     }
     if (!hechos.length) throw { message: fallos.join(" | ") };
     return `${hechos.length} registro(s) importado(s).${fallos.length ? ` Con problemas: ${fallos.join(" | ")}` : ""}`;
+  });
+}
+
+/** El usuario indica qué columna es cada dato de un Excel/CSV de facturas; se relee el original (sin IA). */
+export async function aplicarMapeoDocumento(fd: FormData): Promise<Res> {
+  return run(["/chat"], async ({ db }) => {
+    const id = z.string().uuid().parse(s(fd, "documento_id"));
+    const campos = ["fecha", "tercero", "nif", "numero", "base", "iva", "total", "concepto", "finca", "tipo"] as const;
+    const mapeo: Record<string, number> = {};
+    for (const c of campos) { const v = s(fd, `col_${c}`); if (v != null && /^\d+$/.test(v)) mapeo[c] = Number(v); }
+    const t = s(fd, "tipo_facturas");
+    const { aplicarMapeoTabla } = await import("@/lib/documentos/extraer");
+    const r = await aplicarMapeoTabla(db, id, mapeo, t === "venta" ? "venta" : t === "gasto" ? "gasto" : null);
+    if (!r.ok) throw { message: r.error };
+    return `Leídas ${r.n} línea(s). Revísalas abajo.`;
   });
 }
 

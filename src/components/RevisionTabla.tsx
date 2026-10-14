@@ -1,16 +1,22 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import ActionForm from "./ActionForm";
 import type { FincaOpt } from "./FincaParcela";
 import { importarRegistros } from "@/lib/actions";
 
-type Tipo = "gasto" | "cosecha" | "parte";
+type Tipo = "gasto" | "venta" | "cosecha" | "parte";
 type Fila = Record<string, string> & { tipo: Tipo; dudas: string };
 const CATS = ["mano_obra", "insumos", "maquinaria", "combustible", "semillas_plantas", "riego_agua", "herramientas", "transporte", "otros"];
+const CAT_RES: [string, string][] = [
+  ["insumos", "Insumos"], ["suministros", "Suministros"], ["consumibles", "Consumibles"], ["mano_obra", "Mano de obra"], ["reparaciones", "Reparaciones y mantenimiento"],
+  ["otros_gastos", "Otros gastos"], ["personal_fijo", "Personal fijo"], ["servicios_profesionales", "Servicios profesionales"], ["instalaciones", "Instalaciones"],
+  ["gastos_generales", "Gastos generales"], ["gastos_financieros", "Gastos financieros"],
+];
 
 const txt = (v: unknown) => (v == null ? "" : String(v));
 const nul = (v: string) => (v.trim() === "" ? null : v.trim());
 const numero = (v: string) => (v.trim() === "" ? NaN : Number(v.replace(",", ".")));
+const numOpc = (v: string) => (v.trim() === "" ? null : numero(v));
 
 export default function RevisionTabla({
   documentoId, fincas, fincaInicial, registros, importados, puedeImportar,
@@ -18,25 +24,26 @@ export default function RevisionTabla({
   documentoId: string; fincas: FincaOpt[]; fincaInicial: string;
   registros: Record<string, any>[]; importados: number[]; puedeImportar: boolean;
 }) {
-  const [finca, setFinca] = useState(fincaInicial);
-  const parcelas = useMemo(() => fincas.find((f) => f.id === finca)?.parcelas ?? [], [fincas, finca]);
-
+  const [finca, setFinca] = useState(fincaInicial); // finca por defecto para las filas que no la traen
   const [filas, setFilas] = useState<Fila[]>(() =>
     registros.map((r) => ({
-      tipo: r.tipo, fecha: txt(r.fecha), parcela: txt(r.parcela), categoria: txt(r.categoria) || "otros",
+      tipo: r.tipo, fecha: txt(r.fecha), parcela: txt(r.parcela), categoria: txt(r.categoria) || "otros", finca: txt(r.finca_id), finca_via: txt(r.finca_via), finca_ref: txt(r.finca_ref),
       proveedor: txt(r.proveedor), concepto: txt(r.concepto), importe: txt(r.importe), moneda: txt(r.moneda) || "EUR",
       tipo_importe: "registrado", cultivo: txt(r.cultivo), variedad: txt(r.variedad), kg: txt(r.kg), cajas: txt(r.cajas),
       calidad: txt(r.calidad), num_trabajadores: txt(r.num_trabajadores), horas_por_trabajador: txt(r.horas_por_trabajador),
-      actividad: txt(r.actividad), dudas: (r.dudas ?? []).join(" · "),
+      actividad: txt(r.actividad), numero_factura: txt(r.numero_factura), nif: txt(r.tipo === "venta" ? r.cliente_nif : r.emisor_nif ?? r.tercero_nif),
+      iva_importe: txt(r.iva_importe), categoria_resultado: "", dudas: (r.dudas ?? []).join(" · "),
     })),
   );
   // Las filas con dudas NO vienen marcadas: hay que revisarlas y marcarlas a propósito
   const [sel, setSel] = useState<Set<number>>(() => new Set(registros.map((r, i) => (!(r.dudas ?? []).length && !importados.includes(i) ? i : -1)).filter((i) => i >= 0)));
 
   const set = (i: number, k: string, v: string) => setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, [k]: v } : f)));
+  const fincaDe = (f: Fila) => f.finca || finca;
+  const parcelasDe = (f: Fila) => fincas.find((x) => x.id === fincaDe(f))?.parcelas ?? [];
   const parcelaId = (f: Fila) => {
     const t = f.parcela.trim().toLowerCase().replace(/^parcela\s*/, "");
-    return parcelas.find((p) => p.id === f.parcela || p.codigo.toLowerCase() === t || (p.nombre ?? "").toLowerCase() === t)?.id ?? null;
+    return parcelasDe(f).find((p) => p.id === f.parcela || p.codigo.toLowerCase() === t || (p.nombre ?? "").toLowerCase() === t)?.id ?? null;
   };
 
   const payload = JSON.stringify(
@@ -44,56 +51,75 @@ export default function RevisionTabla({
       const f = filas[idx];
       const base = { fecha: f.fecha, parcela_id: parcelaId(f) };
       const datos =
-        f.tipo === "gasto" ? { ...base, categoria: f.categoria, importe: numero(f.importe), moneda: f.moneda.toUpperCase(), tipo_importe: f.tipo_importe, proveedor: nul(f.proveedor), concepto: nul(f.concepto) }
+        f.tipo === "gasto" ? { ...base, categoria: f.categoria, importe: numero(f.importe), moneda: f.moneda.toUpperCase(), tipo_importe: f.tipo_importe, proveedor: nul(f.proveedor), concepto: nul(f.concepto),
+            numero_factura: nul(f.numero_factura), proveedor_nif: nul(f.nif), iva_importe: numOpc(f.iva_importe), categoria_resultado: nul(f.categoria_resultado) }
+        : f.tipo === "venta" ? { fecha: f.fecha, importe: numero(f.importe), cliente: nul(f.proveedor), numero_factura: nul(f.numero_factura), cliente_nif: nul(f.nif), iva_importe: numOpc(f.iva_importe), observaciones: nul(f.concepto) }
         : f.tipo === "cosecha" ? { ...base, cultivo: f.cultivo, variedad: nul(f.variedad), kg: numero(f.kg), cajas: nul(f.cajas) == null ? null : numero(f.cajas), calidad: nul(f.calidad) }
         : { ...base, num_trabajadores: numero(f.num_trabajadores), horas_por_trabajador: numero(f.horas_por_trabajador), actividad: nul(f.actividad) };
-      return { idx, tipo: f.tipo, datos };
+      return { idx, tipo: f.tipo, finca_id: fincaDe(f) || null, datos };
     }),
     (_, v) => (typeof v === "number" && Number.isNaN(v) ? null : v), // NaN → null: el servidor lo rechaza con mensaje claro
   );
 
   if (!registros.length) return <p className="text-sm text-stone-500">No se detectaron registros importables en este documento.</p>;
 
+  const sinFinca = [...sel].filter((i) => !fincaDe(filas[i])).length;
   const inp = "input !py-1";
   return (
     <div className="space-y-3">
       <label className="block max-w-sm text-sm">
-        <span className="mb-1 block text-xs font-medium text-stone-600">Finca a la que pertenecen estos registros *</span>
+        <span className="mb-1 block text-xs font-medium text-stone-600">Finca por defecto (para las filas sin finca propia)</span>
         <select className="input" value={finca} onChange={(e) => setFinca(e.target.value)}>
-          <option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+          <option value="">— ninguna: elige la finca en cada fila —</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
         </select>
       </label>
 
       {filas.map((f, i) => {
         const hecho = importados.includes(i);
-        const sinParcela = f.parcela.trim() && finca && !parcelaId(f);
+        const sinParcela = f.parcela.trim() && fincaDe(f) && !parcelaId(f);
+        const esFactura = f.tipo === "gasto" || f.tipo === "venta";
         return (
           <div key={i} className={`rounded-lg border p-3 ${hecho ? "border-green-300 bg-green-50 opacity-70" : f.dudas ? "border-amber-300 bg-amber-50" : "border-stone-200"}`}>
-            <div className="mb-2 flex items-center gap-2 text-sm">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
               <input type="checkbox" disabled={hecho || !puedeImportar} checked={sel.has(i)}
                 onChange={(e) => setSel((s) => { const n = new Set(s); e.target.checked ? n.add(i) : n.delete(i); return n; })} />
               <b>#{i + 1}</b>
               <select className="input !w-auto !py-1" value={f.tipo} disabled={hecho} onChange={(e) => set(i, "tipo", e.target.value)}>
-                <option value="gasto">Gasto</option><option value="cosecha">Cosecha</option><option value="parte">Parte de trabajo</option>
+                <option value="gasto">Gasto (factura recibida)</option><option value="venta">Venta (factura emitida)</option><option value="cosecha">Cosecha</option><option value="parte">Parte de trabajo</option>
+              </select>
+              <select className={`input !w-auto !py-1 ${fincaDe(f) ? "" : "!border-red-400"}`} value={f.finca} disabled={hecho} onChange={(e) => set(i, "finca", e.target.value)} aria-label="Finca de esta fila">
+                <option value="">{finca ? "Finca por defecto" : "¿Qué finca? *"}</option>{fincas.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
               </select>
               {hecho && <span className="text-xs font-semibold text-green-700">✔ Ya importado</span>}
             </div>
+            {f.finca_via && f.finca && <p className="mb-1 text-xs text-green-800">📍 Finca detectada: {f.finca_via}</p>}
             {f.dudas && <p className="mb-2 text-xs text-amber-800">⚠ Revisar: {f.dudas}</p>}
             <fieldset disabled={hecho || !puedeImportar} className="grid gap-2 sm:grid-cols-4">
               <label className="text-xs">Fecha<input type="date" className={inp} value={f.fecha} onChange={(e) => set(i, "fecha", e.target.value)} /></label>
-              <label className="text-xs">Parcela{f.tipo === "cosecha" ? " *" : ""}
-                <select className={inp} value={parcelaId(f) ?? ""} onChange={(e) => set(i, "parcela", e.target.value)}>
-                  <option value="">{sinParcela ? `«${f.parcela}» no existe` : "—"}</option>
-                  {parcelas.map((p) => <option key={p.id} value={p.id}>{p.codigo}</option>)}
-                </select>
-              </label>
+              {!esFactura && (
+                <label className="text-xs">Parcela{f.tipo === "cosecha" ? " *" : ""}
+                  <select className={inp} value={parcelaId(f) ?? ""} onChange={(e) => set(i, "parcela", e.target.value)}>
+                    <option value="">{sinParcela ? `«${f.parcela}» no existe` : "—"}</option>
+                    {parcelasDe(f).map((p) => <option key={p.id} value={p.id}>{p.codigo}</option>)}
+                  </select>
+                </label>
+              )}
+              {esFactura && (<>
+                <label className="text-xs">Nº factura<input className={inp} value={f.numero_factura} onChange={(e) => set(i, "numero_factura", e.target.value)} /></label>
+                <label className="text-xs">{f.tipo === "venta" ? "Cliente" : "Proveedor"}<input className={inp} value={f.proveedor} onChange={(e) => set(i, "proveedor", e.target.value)} /></label>
+                <label className="text-xs">NIF/CIF<input className={inp} value={f.nif} onChange={(e) => set(i, "nif", e.target.value)} /></label>
+                <label className="text-xs">Base sin IVA (€)<input className={inp} inputMode="decimal" value={f.importe} onChange={(e) => set(i, "importe", e.target.value)} /></label>
+                <label className="text-xs">IVA (€)<input className={inp} inputMode="decimal" value={f.iva_importe} onChange={(e) => set(i, "iva_importe", e.target.value)} /></label>
+                <label className="text-xs sm:col-span-2">Concepto<input className={inp} value={f.concepto} onChange={(e) => set(i, "concepto", e.target.value)} /></label>
+              </>)}
               {f.tipo === "gasto" && (<>
-                <label className="text-xs">Categoría<select className={inp} value={f.categoria} onChange={(e) => set(i, "categoria", e.target.value)}>{CATS.map((c) => <option key={c}>{c}</option>)}</select></label>
-                <label className="text-xs">Importe<input className={inp} inputMode="decimal" value={f.importe} onChange={(e) => set(i, "importe", e.target.value)} /></label>
+                <label className="text-xs">Concepto de la cuenta de resultados
+                  <select className={inp} value={f.categoria_resultado} onChange={(e) => set(i, "categoria_resultado", e.target.value)}>
+                    <option value="">Automático (según proveedor)</option>{CAT_RES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+                  </select></label>
+                <label className="text-xs">Tipo de gasto<select className={inp} value={f.categoria} onChange={(e) => set(i, "categoria", e.target.value)}>{CATS.map((c) => <option key={c}>{c}</option>)}</select></label>
                 <label className="text-xs">Moneda<input className={inp} maxLength={3} value={f.moneda} onChange={(e) => set(i, "moneda", e.target.value)} /></label>
                 <label className="text-xs">Naturaleza<select className={inp} value={f.tipo_importe} onChange={(e) => set(i, "tipo_importe", e.target.value)}>{["registrado", "presupuesto", "estimacion", "prevision"].map((c) => <option key={c}>{c}</option>)}</select></label>
-                <label className="text-xs">Proveedor<input className={inp} value={f.proveedor} onChange={(e) => set(i, "proveedor", e.target.value)} /></label>
-                <label className="text-xs">Concepto<input className={inp} value={f.concepto} onChange={(e) => set(i, "concepto", e.target.value)} /></label>
               </>)}
               {f.tipo === "cosecha" && (<>
                 <label className="text-xs">Cultivo<input className={inp} value={f.cultivo} onChange={(e) => set(i, "cultivo", e.target.value)} /></label>
@@ -113,13 +139,16 @@ export default function RevisionTabla({
       })}
 
       {puedeImportar ? (
-        <ActionForm action={importarRegistros} label={`Importar ${sel.size} fila(s) marcada(s)`} reset={false} className="flex flex-wrap items-center gap-3">
-          <input type="hidden" name="documento_id" value={documentoId} />
-          <input type="hidden" name="finca_id" value={finca} />
-          <input type="hidden" name="filas" value={payload} />
-        </ActionForm>
+        <>
+          {sinFinca > 0 && <p className="text-xs text-red-600">Hay {sinFinca} fila(s) marcada(s) sin finca: elígela en cada fila o pon una finca por defecto.</p>}
+          <ActionForm action={importarRegistros} label={`Importar ${sel.size} fila(s) marcada(s)`} reset={false} className="flex flex-wrap items-center gap-3">
+            <input type="hidden" name="documento_id" value={documentoId} />
+            <input type="hidden" name="finca_id" value={finca} />
+            <input type="hidden" name="filas" value={payload} />
+          </ActionForm>
+        </>
       ) : <p className="text-xs text-stone-500">Tu rol no permite importar registros.</p>}
-      <p className="text-xs text-stone-500">Solo se importan las filas marcadas. Las que tienen dudas están desmarcadas hasta que las revises.</p>
+      <p className="text-xs text-stone-500">Solo se importan las filas marcadas. Las que tienen dudas están desmarcadas hasta que las revises. Los importes son la base sin IVA.</p>
     </div>
   );
 }

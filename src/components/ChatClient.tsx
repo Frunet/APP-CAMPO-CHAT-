@@ -221,8 +221,8 @@ export default function ChatClient() {
         <span className="text-stone-400">Los registros siempre se confirman con el botón.</span>
       </div>
       <form onSubmit={enviar} className="mt-1 flex items-end gap-2">
-        <input ref={adjunto} type="file" hidden accept=".pdf,.xls,.xlsx,.csv,.docx,.jpg,.jpeg,.png"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) adjuntar(f); e.target.value = ""; }} />
+        <input ref={adjunto} type="file" multiple hidden accept=".pdf,.xls,.xlsx,.csv,.docx,.jpg,.jpeg,.png"
+          onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ""; void (async () => { for (const f of fs) await adjuntar(f); })(); }} />
         <button type="button" className="btn-ghost" disabled={enviando} title="Adjuntar factura, albarán, parte, foto…" onClick={() => adjunto.current?.click()}>📎</button>
         <textarea
           className="input max-h-32 min-h-[2.5rem] flex-1 resize-none" rows={1} placeholder="Escribe un mensaje…" value={texto}

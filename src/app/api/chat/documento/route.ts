@@ -24,11 +24,18 @@ export async function POST(req: Request) {
     convId = data.id;
   }
 
-  const ext = doc.datos_extraidos as { resumen?: string; registros?: { dudas?: string[] }[] } | null;
+  const ext = doc.datos_extraidos as { resumen?: string; registros?: { dudas?: string[]; finca_id?: string | null; numero_factura?: string | null }[]; mapeo_pendiente?: unknown } | null;
   const n = ext?.registros?.length ?? 0;
   const dudas = (ext?.registros ?? []).filter((r) => (r.dudas ?? []).length).length;
   const usuario = `Adjunto el documento «${doc.nombre}» (id ${doc.id}).`;
-  const asistente = ext
+  const facturas = (ext?.registros ?? []).filter((r) => r.numero_factura != null);
+  const sinFinca = facturas.filter((r) => !r.finca_id).length;
+  const asistente = ext?.mapeo_pendiente
+    ? `He guardado el original de «${doc.nombre}». Parece un resumen de facturas, pero no he podido identificar todas las columnas: indícamelas en la tarjeta y lo leo sin más.`
+    : facturas.length
+    ? `He leído «${doc.nombre}»: ${facturas.length} línea(s) de factura${dudas ? `, ${dudas} con dudas` : ""}. ${sinFinca ? `${sinFinca} no tienen finca identificada: elígela en cada fila (o añade el identificador en Maestros → Lectura de facturas). ` : "Todas tienen finca asignada. "}` +
+      "No se ha importado nada: revisa la tarjeta, marca las filas y pulsa «Importar»."
+    : ext
     ? `He guardado el original y leído «${doc.nombre}»: ${n} fila(s) detectada(s)${dudas ? `, ${dudas} con dudas` : ""}.${ext.resumen ? ` ${ext.resumen}` : ""} ` +
       "No se ha importado nada: hay que revisar y marcar las filas en la tarjeta de revisión y pulsar «Importar»."
     : `He guardado el original de «${doc.nombre}», pero no se ha podido leer todavía (estado: ${doc.estado}). Se puede reintentar desde la tarjeta.`;

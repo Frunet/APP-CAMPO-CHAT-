@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { descartarDocumento } from "@/lib/actions";
 import ActionForm from "./ActionForm";
 import RevisionTabla from "./RevisionTabla";
+import MapeoColumnas from "./MapeoColumnas";
 import type { FincaOpt } from "./FincaParcela";
 
 type Doc = { id: string; nombre: string; estado: string; finca_id: string | null; datos_extraidos: any };
@@ -45,7 +46,7 @@ export default function RevisionDocumento({ id }: { id: string }) {
   if (error && !doc) return <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">{error}</p>;
   if (!doc) return <p className="text-xs text-stone-500">Cargando documento…</p>;
 
-  const ext = doc.datos_extraidos as { resumen?: string; registros?: Record<string, any>[]; importados?: number[] } | null;
+  const ext = doc.datos_extraidos as { resumen?: string; registros?: Record<string, any>[]; importados?: number[]; mapeo_pendiente?: any } | null;
   const importados = ext?.importados ?? [];
   const abierto = doc.estado !== "importado" && doc.estado !== "descartado";
 
@@ -68,7 +69,8 @@ export default function RevisionDocumento({ id }: { id: string }) {
           <span className="text-xs text-stone-500">Aún no se ha leído.</span>
         </div>
       )}
-      {ext && abierto && (
+      {ext?.mapeo_pendiente && abierto && <MapeoColumnas documentoId={doc.id} pendiente={ext.mapeo_pendiente} alTerminar={cargar} />}
+      {ext && abierto && !ext.mapeo_pendiente && (
         <RevisionTabla
           key={`${doc.estado}-${importados.length}`}
           documentoId={doc.id} fincas={fincas} fincaInicial={doc.finca_id ?? ""}
