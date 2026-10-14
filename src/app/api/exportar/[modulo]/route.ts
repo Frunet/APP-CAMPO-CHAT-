@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { CAP, datosCosechas, datosGastos, datosTrabajo, leerFM, type FM } from "@/lib/modulos";
+import { CATEGORIAS_CG, imputacionCampana } from "@/lib/costes-generales";
 import { excelDeDoc, pdfDeDoc, type Doc } from "@/lib/informes-export";
 
 export const maxDuration = 120;
@@ -17,6 +18,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ modulo: string 
   if (!auth.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const url = new URL(req.url);
+  if (modulo === "costes-generales") return costesGenerales(db, auth.user.id, url);
   const formato = url.searchParams.get("formato") === "pdf" ? "pdf" : "xlsx";
   const f: FM = leerFM(Object.fromEntries(url.searchParams) as Record<string, string>);
 
@@ -84,4 +86,34 @@ export async function GET(req: Request, ctx: { params: Promise<{ modulo: string 
       "Content-Disposition": `attachment; filename="${nombre}.xlsx"`,
     },
   });
+}
+
+// Costes generales imputados a una campaña (solo administrador)
+async function costesGenerales(db: Awaited<ReturnType<typeof createClient>>, uid: string, url: URL) {
+  const { data: perfil } = await db.from("profiles").select("rol").eq("id", uid).maybeSingle();
+  if (perfil?.rol !== "administrador") return NextResponse.json({ error: "Solo el administrador puede descargar los costes generales" }, { status: 403 });
+  const campana = url.searchParams.get("campana") ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(campana)) return NextResponse.json({ error: "Falta la campaña" }, { status: 400 });
+  const r = await imputacionCampana(db, campana);
+  if ("error" in r) return NextResponse.json({ error: r.error }, { status: 400 });
+  const nombreCat = Object.fromEntries(CATEGORIAS_CG), nombreFinca = new Map(r.fincas.map((f) => [f.id, f.nombre]));
+  const porFinca = new Map<string, Map<string, number>>();
+  r.lineas.forEach((l) => { const m = porFinca.get(l.finca_id) ?? new Map<string, number>(); m.set(l.coste.categoria, (m.get(l.coste.categoria) ?? 0) + l.importe); porFinca.set(l.finca_id, m); });
+  const tot = (m?: Map<string, number>) => Math.round([...(m?.values() ?? [])].reduce((a, b) => a + b, 0) * 100) / 100;
+  const doc: Doc = {
+    titulo: `Costes generales · ${r.camp.nombre}`, horizontal: true, maxFilasPdf: 3000,
+    tablas: [
+      { titulo: "Por finca y categoría", columnas: ["Finca", ...CATEGORIAS_CG.map(([, t]) => t), "Total"],
+        filas: [...r.fincas.map((f) => [f.nombre, ...CATEGORIAS_CG.map(([k]) => porFinca.get(f.id)?.get(k) ?? 0), tot(porFinca.get(f.id))]),
+          ["Total imputado", ...CATEGORIAS_CG.map(([k]) => Math.round(r.lineas.filter((l) => l.coste.categoria === k).reduce((a, l) => a + l.importe, 0) * 100) / 100), r.total]] },
+      { titulo: "Detalle", columnas: ["Finca", "Concepto", "Categoría", "Importe imputado", "Periodicidad", "Importe del coste", "Reparto"],
+        filas: r.lineas.map((l) => [nombreFinca.get(l.finca_id) ?? "", l.coste.concepto, nombreCat[l.coste.categoria] ?? l.coste.categoria, l.importe, l.coste.periodicidad, l.coste.importe, l.coste.finca_id ? "Propio de la finca" : l.coste.reparto === "iguales" ? "General · partes iguales" : "General · por hectáreas"]) },
+    ],
+    resumen: [["Campaña", r.camp.nombre], ["Periodo", `${dmy(r.ini)} a ${dmy(r.fin)}`], ["Total imputado (€)", num(r.total)], ["Sin repartir (€)", num(r.sinRepartir.reduce((a, x) => a + x.importe, 0))]],
+    notas: [`Devengo diario (importe anual ÷ 365) dentro del periodo de la campaña${r.camp.fecha_fin ? "" : "; campaña abierta: hasta hoy"}.`, ...r.sinRepartir.map((x) => `Sin repartir: ${x.coste.concepto} (${num(x.importe)}): ${x.motivo}`)],
+  };
+  const nombre = `costes-generales_${new Date().toISOString().slice(0, 10)}`;
+  if (url.searchParams.get("formato") === "pdf")
+    return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
+  return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });
 }

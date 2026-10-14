@@ -4,6 +4,7 @@ import { CATEGORIAS, TIPOS_IMPORTE, aQuery, datosGastos, leerFM } from "@/lib/mo
 import { Field } from "@/components/ActionForm";
 import Descargas from "@/components/Descargas";
 import { eur, fecha, num } from "@/lib/format";
+import { imputacionCampana } from "@/lib/costes-generales";
 
 const MOSTRAR = 300;
 
@@ -11,6 +12,7 @@ export default async function Gastos({ searchParams }: { searchParams: Promise<R
   const f = leerFM(await searchParams);
   const ctx = await cargarContexto();
   const d = await datosGastos(ctx.db, f);
+  const cg = ctx.esAdmin && f.campana ? await imputacionCampana(ctx.db, f.campana, f.finca) : null; // costes generales: solo administrador
   const nombreCat = Object.fromEntries(CATEGORIAS), nombreTipo = Object.fromEntries(TIPOS_IMPORTE);
   const parcelas = ctx.fincas.filter((x) => !f.finca || x.id === f.finca).flatMap((x) => x.parcelas.map((p) => ({ id: p.id, t: `${x.nombre} · ${p.codigo}` })));
 
@@ -19,7 +21,7 @@ export default async function Gastos({ searchParams }: { searchParams: Promise<R
       <h1 className="text-xl font-semibold">Gastos y costes</h1>
 
       <Descargas modulo="gastos" qs={aQuery(f)} n={d.n} mostrados={Math.min(d.n, MOSTRAR)}
-        registroPor="Los gastos se registran desde el chat («Apunta 300 euros de gasoil en la finca El Mango») o subiendo la factura en Documentos." />
+        registroPor="Los gastos se registran desde el chat («Apunta 300 euros de gasoil en la finca El Mango») o adjuntando la factura en el chat." />
 
       <form method="get" className="card grid gap-3 sm:grid-cols-4">
         <Field label="Finca"><select name="finca" className="input" defaultValue={f.finca ?? ""}><option value="">Todas</option>{ctx.fincas.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Field>
@@ -55,6 +57,18 @@ export default async function Gastos({ searchParams }: { searchParams: Promise<R
           <div className="text-xs text-stone-400">{d.noContabilizado.n} presupuestos / estimaciones / previsiones</div>
         </div>
       </div>
+
+      {cg && !("error" in cg) && (
+        <div className="card text-sm">
+          <div className="text-xs text-stone-500">Costes generales imputados a la campaña «{cg.camp.nombre}»{f.finca ? " (esta finca)" : ""} · solo administrador</div>
+          <div className="text-2xl font-semibold">{eur(cg.total)}</div>
+          <div className="text-xs text-stone-400">
+            Aparte del gasto de campo de arriba (personal fijo, amortizaciones, financieros…). Coste total aproximado: {d.mixta ? "—" : eur(d.total + cg.total)}
+            {!f.finca && cg.sinRepartir.length > 0 && ` · ${eur(cg.sinRepartir.reduce((a, x) => a + x.importe, 0))} sin repartir (falta la superficie de alguna finca)`}.{" "}
+            <Link href={`/maestros?seccion=costes&campana=${f.campana}`} className="text-brand-700">Ver detalle →</Link>
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-stone-500">
         Mano de obra según partes de trabajo (los partes no tienen campaña: ese filtro no se aplica a esta cifra): <b>{eur(d.laboral)}</b>. Se muestra aparte para no duplicarla si también se anotó como gasto.

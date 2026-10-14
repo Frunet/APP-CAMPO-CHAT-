@@ -5,16 +5,18 @@ import SeccionUsuarios from "@/components/maestros/SeccionUsuarios";
 import SeccionFincas from "@/components/maestros/SeccionFincas";
 import SeccionCultivos from "@/components/maestros/SeccionCultivos";
 import SeccionPersonal from "@/components/maestros/SeccionPersonal";
+import SeccionCostes from "@/components/maestros/SeccionCostes";
 
 const SECCIONES = [
   ["usuarios", "Usuarios y fincas asignadas"],
   ["fincas", "Fincas, parcelas y lotes"],
   ["cultivos", "Cultivos"],
   ["personal", "Personal y costes"],
+  ["costes", "Costes generales"],
 ] as const;
 
-export default async function Maestros({ searchParams }: { searchParams: Promise<{ seccion?: string }> }) {
-  const { seccion } = await searchParams;
+export default async function Maestros({ searchParams }: { searchParams: Promise<{ seccion?: string; campana?: string }> }) {
+  const { seccion, campana } = await searchParams;
   const ctx = await cargarContexto();
   if (!ctx.esAdmin) redirect("/"); // los maestros solo los gestiona el administrador
   const activa = SECCIONES.some(([k]) => k === seccion) ? seccion! : "usuarios";
@@ -36,6 +38,7 @@ export default async function Maestros({ searchParams }: { searchParams: Promise
       {activa === "fincas" && <SeccionFincas ctx={ctx} />}
       {activa === "cultivos" && <SeccionCultivos ctx={ctx} />}
       {activa === "personal" && <SeccionPersonal ctx={ctx} />}
+      {activa === "costes" && <SeccionCostes ctx={ctx} campana={campana} />}
     </div>
   );
 }

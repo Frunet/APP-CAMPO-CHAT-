@@ -154,6 +154,65 @@ export async function crearCampana(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- costes generales (solo administrador) ----------
+const CATEGORIAS_CG = ["personal_fijo", "amortizacion", "financiero", "seguros", "otros"] as const;
+const PERIODOS = ["mensual", "trimestral", "anual", "unico"] as const;
+
+export async function crearCosteGeneral(fd: FormData): Promise<Res> {
+  return run([...RUTAS_MAESTROS, "/gastos"], async ({ db }) => {
+    await exigirAdmin(db);
+    const p = z.object({
+      concepto: z.string().min(1, "Falta el concepto"), categoria: z.enum(CATEGORIAS_CG, { message: "Elige la categoría" }),
+      periodicidad: z.enum(PERIODOS, { message: "Elige la periodicidad" }), desde: fechaZ,
+    }).parse({ concepto: s(fd, "concepto") ?? "", categoria: s(fd, "categoria"), periodicidad: s(fd, "periodicidad"), desde: s(fd, "desde") });
+    let hasta = s(fd, "hasta");
+    if (hasta && !fechaZ.safeParse(hasta).success) throw { message: "Fecha final no válida" };
+    let importe = numeroOpcional(fd, "importe", "El importe", 100_000_000);
+    let periodicidad: string = p.periodicidad, valor: number | null = null, anios: number | null = null;
+    if (p.categoria === "amortizacion") {
+      // amortización lineal: valor ÷ años de vida útil = cuota anual; termina al acabar la vida útil
+      valor = numeroOpcional(fd, "valor_adquisicion", "El valor de adquisición", 100_000_000);
+      anios = numeroOpcional(fd, "vida_util_anios", "Los años de vida útil", 100);
+      if (!valor || !anios) throw { message: "Una amortización necesita el valor de adquisición y los años de vida útil." };
+      importe = Math.round((valor / anios) * 100) / 100; periodicidad = "anual";
+      const d = new Date(p.desde + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + Math.round(anios * 365) - 1);
+      hasta = d.toISOString().slice(0, 10);
+    }
+    if (importe == null) throw { message: "Falta el importe" };
+    if (hasta && hasta < p.desde) throw { message: "La fecha final es anterior a la inicial." };
+    const fincaId = s(fd, "finca_id");
+    const { error } = await db.from("costes_generales").insert({
+      concepto: p.concepto, categoria: p.categoria, periodicidad, desde: p.desde, hasta, importe, valor_adquisicion: valor, vida_util_anios: anios,
+      finca_id: fincaId, reparto: s(fd, "reparto") === "iguales" ? "iguales" : "hectareas", observaciones: s(fd, "observaciones"),
+    });
+    check(error);
+    return fincaId ? "Coste de la finca guardado." : "Coste general guardado (se repartirá entre las fincas).";
+  });
+}
+
+export async function cerrarCosteGeneral(fd: FormData): Promise<Res> {
+  return run([...RUTAS_MAESTROS, "/gastos"], async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const hasta = fechaZ.parse(s(fd, "hasta") ?? new Date().toISOString().slice(0, 10));
+    const { data, error } = await db.from("costes_generales").update({ hasta }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo dar de baja el coste." };
+    return "Coste dado de baja.";
+  });
+}
+
+export async function eliminarCosteGeneral(fd: FormData): Promise<Res> {
+  return run([...RUTAS_MAESTROS, "/gastos"], async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("costes_generales").delete().eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo eliminar." };
+    return "Coste eliminado (queda en el historial de auditoría).";
+  });
+}
+
 // Catálogo de cultivos y variedades
 export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {
