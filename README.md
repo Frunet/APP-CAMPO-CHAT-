@@ -3,8 +3,6 @@
 Next.js 16 + Supabase (Postgres/RLS/Auth/Storage) + Claude API.
 
 ## Ver la app sin configurar nada (modo demo)
-**Desde GitHub, un clic:** [Abrir en Codespaces](https://codespaces.new/Frunet/APP-CAMPO-CHAT-?quickstart=1) → «Create codespace». Tarda ~2 min en instalar y abre la demo en el puerto 3000 (datos ficticios, sin claves).
-
 **En local:**
 ```bash
 echo NEXT_PUBLIC_DEMO=1 > .env.local
@@ -12,6 +10,12 @@ npm install
 npm run dev
 ```
 Con `NEXT_PUBLIC_DEMO=1` la app no necesita Supabase ni claves: usa datos ficticios en memoria (`src/lib/demo/`), no guarda nada (los formularios responden «Modo demo…»), el chat devuelve respuestas de muestra y la subida de archivos está desactivada. Para desplegarlo en Vercel, importa el repositorio y define esa variable de entorno. **Nunca la actives en producción.**
+
+## Arranque en el servidor (Windows, como la app de mantenimiento)
+- `iniciar.bat`: doble clic para arrancar (instala y compila la primera vez). Abrir `http://localhost:3000`; desde móviles de la red: `http://<IP-del-PC>:3000`.
+- `instalar_arranque_automatico.ps1`: ejecutar **una vez como administrador**; abre el puerto 3000 en el firewall (redes privadas) y hace que la app arranque sola con Windows (tarea `AppCampo`).
+- Tras cambiar código o `.env.local`: `npm run build` y reiniciar (`Restart-ScheduledTask`/`Start-ScheduledTask AppCampo`, o cerrar y abrir `iniciar.bat`).
+- **Voz en el móvil:** el navegador solo permite micrófono y dictado en **HTTPS** (o `localhost`). Por `http://IP:3000` el chat funciona escribiendo, pero el dictado no. Para usar la voz desde el móvil hay que servir la app por HTTPS (p. ej. un túnel seguro o un proxy con certificado).
 
 ## Puesta en marcha
 1. Crear un proyecto Supabase y ejecutar, en orden, `supabase/migrations/0001_schema.sql` y `0002_documentos_gastos.sql` (SQL Editor o `supabase db push`).
