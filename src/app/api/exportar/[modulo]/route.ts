@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { CAP, datosCosechas, datosGastos, datosTrabajo, leerFM, type FM } from "@/lib/modulos";
+import { construirVista, leerConsulta, tablaComparativa, tablaConsolidada, tablaDetalle, pct, valorDe, filasCuenta } from "@/lib/resultados";
 import { CATEGORIAS_CG, imputacionCampana } from "@/lib/costes-generales";
 import { excelDeDoc, pdfDeDoc, type Doc } from "@/lib/informes-export";
 
@@ -18,6 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ modulo: string 
   if (!auth.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
   const url = new URL(req.url);
+  if (modulo === "resultados") return cuentaResultados(db, url);
   if (modulo === "costes-generales") return costesGenerales(db, auth.user.id, url);
   const formato = url.searchParams.get("formato") === "pdf" ? "pdf" : "xlsx";
   const f: FM = leerFM(Object.fromEntries(url.searchParams) as Record<string, string>);
@@ -113,6 +115,33 @@ async function costesGenerales(db: Awaited<ReturnType<typeof createClient>>, uid
     notas: [`Devengo diario (importe anual ÷ 365) dentro del periodo de la campaña${r.camp.fecha_fin ? "" : "; campaña abierta: hasta hoy"}.`, ...r.sinRepartir.map((x) => `Sin repartir: ${x.coste.concepto} (${num(x.importe)}): ${x.motivo}`)],
   };
   const nombre = `costes-generales_${new Date().toISOString().slice(0, 10)}`;
+  if (url.searchParams.get("formato") === "pdf")
+    return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
+  return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });
+}
+
+// Cuenta de resultados (consolidada o comparativa) con el mismo periodo y fincas que la pantalla; la RLS limita a las fincas del usuario
+async function cuentaResultados(db: Awaited<ReturnType<typeof createClient>>, url: URL) {
+  const [{ data: fs }, { data: cs }] = await Promise.all([
+    db.from("fincas").select("id,nombre").eq("activa", true).order("nombre"),
+    db.from("campanas").select("id,nombre,fecha_inicio,fecha_fin").order("fecha_inicio", { ascending: false }),
+  ]);
+  const c = leerConsulta(Object.fromEntries(url.searchParams) as Record<string, string>, (fs ?? []) as any[], (cs ?? []) as any[]);
+  if (!c.fincas.length) return NextResponse.json({ error: "No tienes fincas asignadas" }, { status: 403 });
+  const v = await construirVista(db, c.fincas, c.periodo, c.comparativa);
+  const nf = new Map(c.fincas.map((f) => [f.id, f.nombre]));
+  const filas = filasCuenta(v.actual), ventas = valorDe(filas, "ventas");
+  const doc: Doc = {
+    titulo: "Cuenta de resultados", horizontal: true, maxFilasPdf: 3000,
+    tablas: [c.comparativa ? tablaComparativa(v) : tablaConsolidada(v), tablaDetalle(v, nf)],
+    resumen: [
+      ["Periodo", `${c.periodo.etiqueta} (${dmy(c.periodo.desde)} a ${dmy(c.periodo.hasta)})`], ["Fincas", c.fincas.map((f) => f.nombre).join(", ")],
+      ["Ventas (€)", num(ventas)], ["Margen bruto (€)", `${num(valorDe(filas, "margen_bruto"))}${pct(valorDe(filas, "margen_bruto"), ventas) == null ? "" : ` (${num(pct(valorDe(filas, "margen_bruto"), ventas)!, 1)} % s/ventas)`}`],
+      ["Resultado (€)", `${num(valorDe(filas, "resultado"))}${pct(valorDe(filas, "resultado"), ventas) == null ? "" : ` (${num(pct(valorDe(filas, "resultado"), ventas)!, 1)} % s/ventas)`}`],
+    ],
+    notas: ["Importes en euros sin IVA, calculados en el momento de la descarga. Solo gastos «registrados» en euros; los partes sin tarifa no suman.", "Los costes generales se prorratean por días a cada finca."],
+  };
+  const nombre = `cuenta-resultados_${new Date().toISOString().slice(0, 10)}`;
   if (url.searchParams.get("formato") === "pdf")
     return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
   return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });

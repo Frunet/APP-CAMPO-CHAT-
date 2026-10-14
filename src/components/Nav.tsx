@@ -11,6 +11,7 @@ const todos: { href: string; label: string; icon: string; soloAdmin?: boolean }[
   { href: "/trabajo", label: "Trabajo y horas", icon: "👷" },
   { href: "/cosechas", label: "Cosechas", icon: "🥭" },
   { href: "/gastos", label: "Gastos y costes", icon: "💶" },
+  { href: "/resultados", label: "Cuenta de Resultados", icon: "📈" },
   { href: "/calendario", label: "Calendario", icon: "📅" },
   { href: "/informes", label: "Informes", icon: "📊" },
   { href: "/maestros", label: "Maestros", icon: "🗂️", soloAdmin: true },
