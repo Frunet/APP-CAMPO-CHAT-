@@ -17,6 +17,9 @@ Con `NEXT_PUBLIC_DEMO=1` la app no necesita Supabase ni claves: usa datos fictic
 - Tras cambiar código o `.env.local`: `npm run build` y reiniciar (`Restart-ScheduledTask`/`Start-ScheduledTask AppCampo`, o cerrar y abrir `iniciar.bat`).
 - **Voz en el móvil:** el navegador solo permite micrófono y dictado en **HTTPS** (o `localhost`). Por `http://IP:3000` el chat funciona escribiendo, pero el dictado no. Para usar la voz desde el móvil hay que servir la app por HTTPS (p. ej. un túnel seguro o un proxy con certificado).
 
+## Base de datos propia en el PC (Supabase de código abierto con Docker)
+Carpeta `supabase-propio/`: instalación guiada en 4 pasos (`1_instalar`, `2_aplicar_migraciones`, `3_crear_administrador`, `4_configurar_app`), firewall, copias de seguridad programadas y arranque. Léela entera en [`supabase-propio/LEEME.md`](supabase-propio/LEEME.md). La base de datos vive en `C:\supabase-campo` (fuera de OneDrive) y la API en el puerto 8100.
+
 ## Puesta en marcha
 1. Crear un proyecto Supabase y ejecutar, en orden, `supabase/migrations/0001_schema.sql` y `0002_documentos_gastos.sql` (SQL Editor o `supabase db push`).
 2. Copiar `.env.example` a `.env.local` y rellenarlo (las claves secretas solo en servidor).
