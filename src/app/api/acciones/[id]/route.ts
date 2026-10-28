@@ -6,6 +6,7 @@ import { aplicarRecepcion } from "@/lib/chat/documentos";
 import { aplicarTarea } from "@/lib/chat/tareas";
 import { aplicarMemoria } from "@/lib/chat/memoria";
 import { aplicarDiario } from "@/lib/chat/diario";
+import { aplicarMaestro } from "@/lib/chat/maestros";
 
 const DESTINO: Record<string, string> = {
   registrar_parte: "partes_trabajo",
@@ -59,6 +60,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
     return NextResponse.json({ ok: true, estado: "confirmada", tabla: "tareas", registroId: r.id });
+  }
+
+  // Maestros por el chat: alta, modificación, baja o reactivación
+  if (accion.tipo === "cambiar_maestro") {
+    const r = await aplicarMaestro(db, accion.payload, auth.user.id);
+    if (!r.ok) {
+      await db.from("acciones_pendientes").update({ estado: "pendiente", resuelta_at: null }).eq("id", id);
+      return NextResponse.json({ error: r.error }, { status: 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: accion.payload.tabla, registroId: r.id });
   }
 
   // Diario de la finca: anotar una novedad o retirarla

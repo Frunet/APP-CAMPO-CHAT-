@@ -44,7 +44,7 @@ export async function resolverPersonal(db: Db, fincaId: string | undefined, equi
   if (equipoTxt && trabajadorTxt) return { error: "Indica un equipo o un trabajador, no ambos en el mismo parte." };
   const buscar = async (tabla: "equipos" | "trabajadores", txt: string) => {
     let qb = db.from(tabla).select("id,nombre,finca_id").eq("activo", true);
-    if (fincaId) qb = qb.eq("finca_id", fincaId);
+    if (fincaId) qb = tabla === "trabajadores" ? qb.or(`finca_id.eq.${fincaId},finca_id.is.null`) : qb.eq("finca_id", fincaId); // un trabajador sin finca vale para todas
     const { data } = await qb;
     const q = txt.trim().toLowerCase();
     const m = (data ?? []).filter((x: any) => x.nombre.toLowerCase().includes(q));
