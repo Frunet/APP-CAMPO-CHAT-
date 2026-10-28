@@ -423,6 +423,6 @@ async function proponer(name: string, i: any, ctx: Ctx) {
   if (error) return { error: error.message };
   return {
     accion_id: data.id, tipo, resumen,
-    instruccion: "Propuesta creada y NO guardada todavía. Presenta el resumen y di que debe confirmarla con el botón. No afirmes que está registrada.",
+    instruccion: "Propuesta creada y NO guardada todavía. La persona ya ve la tarjeta con el resumen y el botón: no repitas el resumen ni los datos; di en una frase natural que te lo dejas preparado para que lo confirme. No afirmes que ya está guardado.",
   };
 }

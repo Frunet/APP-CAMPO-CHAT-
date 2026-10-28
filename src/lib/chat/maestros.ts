@@ -113,7 +113,7 @@ async function rolDe(db: Db, userId: string) {
 async function guardar(ctx: Ctx, payload: unknown, resumen: string) {
   const { data, error } = await ctx.db.from("acciones_pendientes").insert({ conversacion_id: ctx.conversacionId, user_id: ctx.userId, tipo: "cambiar_maestro", payload, resumen }).select("id").single();
   if (error) return { error: error.message };
-  return { accion_id: data.id, tipo: "cambiar_maestro", resumen, instruccion: "Propuesta creada y NO guardada todavía. Muestra el resumen y di que debe confirmarla con el botón." };
+  return { accion_id: data.id, tipo: "cambiar_maestro", resumen, instruccion: "Propuesta creada y NO guardada todavía. La persona ya ve la tarjeta con el resumen y el botón: no repitas el resumen ni los datos; di en una frase natural que te lo dejas preparado para que lo confirme. No afirmes que ya está guardado." };
 }
 
 export async function proponerMaestro(i: any, ctx: Ctx): Promise<unknown> {

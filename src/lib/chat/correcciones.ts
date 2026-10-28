@@ -219,7 +219,7 @@ async function guardarAccion(ctx: Ctx, tipo: string, payload: unknown, resumen: 
   if (error) return { error: error.message };
   return {
     accion_id: data.id, tipo, resumen,
-    instruccion: "Propuesta creada y NO aplicada todavía. Muestra el resumen y di que debe confirmarla con el botón. No afirmes que ya está corregido o anulado.",
+    instruccion: "Propuesta creada y NO aplicada todavía. La persona ya ve la tarjeta con el antes y el después y el botón: no lo repitas; di en una frase natural que te lo dejas preparado para que lo confirme. No afirmes que ya está corregido o anulado.",
   };
 }
 
