@@ -13,6 +13,7 @@ const todos: { href: string; label: string; icon: string; soloAdmin?: boolean }[
   { href: "/gastos", label: "Gastos y costes", icon: "💶" },
   { href: "/resultados", label: "Cuenta de Resultados", icon: "📈" },
   { href: "/calendario", label: "Calendario", icon: "📅" },
+  { href: "/diario", label: "Diario de fincas", icon: "📝" },
   { href: "/informes", label: "Informes", icon: "📊" },
   { href: "/maestros", label: "Maestros", icon: "🗂️", soloAdmin: true },
 ];

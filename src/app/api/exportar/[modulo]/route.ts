@@ -20,6 +20,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ modulo: string 
 
   const url = new URL(req.url);
   if (modulo === "resultados") return cuentaResultados(db, url);
+  if (modulo === "diario") return diarioFincas(db, url);
   if (modulo === "costes-generales") return costesGenerales(db, auth.user.id, url);
   const formato = url.searchParams.get("formato") === "pdf" ? "pdf" : "xlsx";
   const f: FM = leerFM(Object.fromEntries(url.searchParams) as Record<string, string>);
@@ -142,6 +143,28 @@ async function cuentaResultados(db: Awaited<ReturnType<typeof createClient>>, ur
     notas: ["Importes en euros sin IVA, calculados en el momento de la descarga. Solo gastos «registrados» en euros; los partes sin tarifa no suman.", "Los costes generales se prorratean por días a cada finca."],
   };
   const nombre = `cuenta-resultados_${new Date().toISOString().slice(0, 10)}`;
+  if (url.searchParams.get("formato") === "pdf")
+    return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
+  return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });
+}
+
+// Diario de novedades (con las fincas que la RLS deja ver al usuario)
+async function diarioFincas(db: Awaited<ReturnType<typeof createClient>>, url: URL) {
+  const f = (k: string) => { const v = url.searchParams.get(k); return v && /^[0-9a-f-]{36}$/i.test(v) ? v : null; };
+  const d = (k: string) => { const v = url.searchParams.get(k); return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; };
+  let q = db.from("diario_fincas").select("num,fecha,tipo,tema,texto,fincas(nombre),parcelas(codigo),autor_nombre").eq("activa", true).order("fecha", { ascending: false }).limit(5000);
+  const finca = f("finca"); if (finca) q = q.eq("finca_id", finca);
+  const desde = d("desde"), hasta = d("hasta"); if (desde) q = q.gte("fecha", desde); if (hasta) q = q.lte("fecha", hasta);
+  const { data, error } = await q;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const filas = (data ?? []) as any[];
+  const doc: Doc = {
+    titulo: "Diario de fincas", horizontal: true, maxFilasPdf: 3000,
+    tablas: [{ titulo: "Novedades", columnas: ["Nº", "Fecha", "Finca", "Parcela", "Tipo", "Tema", "Novedad", "Anotada por"],
+      filas: filas.map((r) => ["D" + r.num, dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.tipo, r.tema ?? "", r.texto, r.autor_nombre ?? ""]) }],
+    resumen: [["Periodo", desde || hasta ? `${desde ? dmy(desde) : "inicio"} a ${hasta ? dmy(hasta) : "hoy"}` : "Todo el histórico"], ["Anotaciones", filas.length]], notas: [],
+  };
+  const nombre = `diario-fincas_${new Date().toISOString().slice(0, 10)}`;
   if (url.searchParams.get("formato") === "pdf")
     return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
   return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });

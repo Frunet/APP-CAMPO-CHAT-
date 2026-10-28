@@ -365,6 +365,21 @@ export async function alternarMemoria(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- diario de fincas: retirar una anotación desde la pantalla ----------
+export async function retirarNovedad(fd: FormData): Promise<Res> {
+  return run(["/diario"], async ({ db, uid }) => {
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data: p } = await db.from("profiles").select("rol").eq("id", uid).maybeSingle();
+    if (!p?.rol || p.rol === "consulta") throw { message: "Tu rol es de solo consulta." };
+    let q = db.from("diario_fincas").update({ activa: false, updated_at: new Date().toISOString() }).eq("id", id).eq("activa", true);
+    if (p.rol === "encargado") q = q.eq("created_by", uid); // el encargado solo retira las suyas
+    const { data, error } = await q.select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo retirar (¿no es tuya o no tienes permiso?)." };
+    return "Anotación retirada (queda en el historial).";
+  });
+}
+
 // Catálogo de cultivos y variedades
 export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {

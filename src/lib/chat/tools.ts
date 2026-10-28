@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { lunesDe } from "@/lib/tiempo";
 import { esError, resolver, resolverPersonal, type Ref } from "./resolver";
+import { buscarDiario, herramientasDiario, proponerNovedad, proponerRetirarNovedad } from "./diario";
 import { herramientasMemoria, proponerMemoria, proponerOlvidarMemoria } from "./memoria";
 import { consultarCostesGenerales, herramientasCostes } from "./costes";
 import { buscarTareas, herramientasTareas, proponerAsignacionTarea, proponerCompletarTarea } from "./tareas";
@@ -131,7 +132,7 @@ export const tools: Anthropic.Tool[] = [
 
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fecha debe ser YYYY-MM-DD");
 
-tools.push(...herramientasCorreccion, ...herramientasDocumentos, ...herramientasTareas, ...herramientasCostes, ...herramientasMemoria);
+tools.push(...herramientasCorreccion, ...herramientasDocumentos, ...herramientasTareas, ...herramientasCostes, ...herramientasMemoria, ...herramientasDiario);
 
 // ---------- Ejecución ----------
 export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): Promise<unknown> {
@@ -243,6 +244,12 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         for (let d = new Date(desde); d <= hoy; d = new Date(d.getTime() + 864e5)) if (!conParte.has(iso(d))) sinParte.push(iso(d));
         return { tareas: tareas.data, tareas_sin_dia: sinDia.data /* semana_inicio nulo = pendiente sin fecha */, dias_sin_parte: sinParte, acciones_sin_confirmar: acciones.data };
       }
+      case "proponer_novedad":
+        return await proponerNovedad(input, ctx);
+      case "buscar_diario":
+        return await buscarDiario(input, ctx);
+      case "proponer_retirar_novedad":
+        return await proponerRetirarNovedad(input, ctx);
       case "proponer_memoria":
         return await proponerMemoria(input, ctx);
       case "proponer_olvidar_memoria":
