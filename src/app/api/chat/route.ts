@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { clienteIA } from "@/lib/ia/cliente";
 import { ejecutarHerramienta, tools } from "@/lib/chat/tools";
 import { DEMO } from "@/lib/demo/config";
 import { respuestaDemo } from "@/lib/demo/chat";
@@ -10,7 +11,7 @@ import { MODELO_COMPLEJO, MODELO_SIMPLE, elegirModelo } from "@/lib/chat/modelo"
 export const maxDuration = 60;
 const MAX_VUELTAS = 8;
 
-const anthropic = new Anthropic(); // ANTHROPIC_API_KEY solo en servidor
+const anthropic = clienteIA(); // Claude por defecto; Gemini si IA_PROVIDER=gemini (pruebas)
 
 function systemPrompt(nombre: string, rol: string, memoria = "", resumen = "") {
   const hoy = new Date().toISOString().slice(0, 10);
@@ -118,7 +119,8 @@ export async function POST(req: Request) {
     }
   } catch (e) {
     console.error("chat error", e);
-    return NextResponse.json({ error: "No he podido contactar con el asistente. Inténtalo de nuevo." }, { status: 502 });
+    const limite = (e as { status?: number })?.status === 429;
+    return NextResponse.json({ error: limite ? "El servicio de IA ha alcanzado su límite de uso (normal en la clave gratuita). Espera un minuto e inténtalo de nuevo." : "No he podido contactar con el asistente. Inténtalo de nuevo." }, { status: limite ? 429 : 502 });
   }
 
   // Un solo insert con created_at escalonado para conservar el orden

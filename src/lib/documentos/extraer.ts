@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
+import { clienteIA } from "@/lib/ia/cliente";
 import { CAMPOS_TABLA, cargarIdentificadores, detectarColumnas, faltan, norm, procesarFacturas, registrosDeTabla, type Mapeo } from "./facturas";
 
 const MODEL = process.env.DOC_MODEL ?? "claude-sonnet-5-5"; // en pruebas: DOC_MODEL=claude-haiku-5-5
@@ -230,7 +231,7 @@ export async function procesarDocumento(db: SupabaseClient, id: string): Promise
 
   let ext_: Extraccion;
   try {
-    const res = await new Anthropic().messages.create({
+    const res = await clienteIA().messages.create({
       // Sonnet 5.5 rechaza tool_choice forzado (400): se usa "auto" y la instrucción final exige llamar a la herramienta
       model: MODEL, max_tokens: 16000, system: SISTEMA, tools: [herramienta],
       tool_choice: { type: "auto" }, output_config: { effort: "medium" },
