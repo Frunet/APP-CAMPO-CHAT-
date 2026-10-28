@@ -4,11 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-const todos: { href: string; label: string; icon: string; soloAdmin?: boolean }[] = [
+const todos: { href: string; label: string; icon: string; soloAdmin?: boolean; soloGestion?: boolean }[] = [
   { href: "/", label: "Inicio", icon: "🏠" },
   { href: "/chat", label: "Chat inteligente", icon: "💬" },
   { href: "/fincas", label: "Fincas y parcelas", icon: "🌳" },
   { href: "/trabajo", label: "Trabajo y horas", icon: "👷" },
+  { href: "/nominas", label: "Nóminas", icon: "🧾", soloGestion: true },
   { href: "/cosechas", label: "Cosechas", icon: "🥭" },
   { href: "/gastos", label: "Gastos y costes", icon: "💶" },
   { href: "/resultados", label: "Cuenta de Resultados", icon: "📈" },
@@ -21,7 +22,7 @@ const movil = ["/", "/chat", "/trabajo", "/cosechas"];
 
 
 export default function Nav({ nombre, rol }: { nombre: string; rol: string }) {
-  const items = todos.filter((i) => !i.soloAdmin || rol === "administrador"); // Maestros: solo administrador
+  const items = todos.filter((i) => (!i.soloAdmin || rol === "administrador") && (!i.soloGestion || rol === "administrador" || rol === "responsable")); // Maestros: solo administrador
   const path = usePathname();
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);

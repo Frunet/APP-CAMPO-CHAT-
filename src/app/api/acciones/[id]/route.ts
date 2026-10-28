@@ -94,6 +94,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: true, estado: "confirmada", tabla: "documentos_esperados", registroId: r.id });
   }
 
+  // Parte con una línea por trabajador: se guardan todas a la vez (o ninguna)
+  if (accion.tipo === "registrar_parte_lineas") {
+    const { comun, lineas } = accion.payload as { comun: Record<string, unknown>; lineas: { trabajador_id: string | null; trabajador_nombre: string | null; horas: number; horas_extra: number }[] };
+    const filas = lineas.map((l) => ({
+      ...comun, trabajador_id: l.trabajador_id, trabajador_nombre: l.trabajador_nombre, num_trabajadores: 1,
+      horas_por_trabajador: l.horas, horas_extra_por_trabajador: l.horas_extra,
+    }));
+    const { data: regs, error: e2 } = await db.from("partes_trabajo").insert(filas).select("id");
+    if (e2) {
+      await db.from("acciones_pendientes").update({ estado: "pendiente", resuelta_at: null }).eq("id", id);
+      const dup = e2.code === "23505";
+      return NextResponse.json({ error: dup ? "Ya existe el parte de alguno de estos trabajadores ese día (duplicado). No se ha guardado ninguna línea." : `No se pudo guardar: ${e2.message}` }, { status: dup ? 409 : 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: regs?.[0]?.id ?? null }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: "partes_trabajo", registroId: regs?.[0]?.id });
+  }
+
   const tabla = DESTINO[accion.tipo];
   const { data: reg, error } = await db.from(tabla).insert(accion.payload).select("id").single();
   if (error) {

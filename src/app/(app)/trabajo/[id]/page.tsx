@@ -19,7 +19,7 @@ export default async function DetalleParte({ params }: { params: Promise<{ id: s
       <h1 className="text-xl font-semibold">Parte del {fecha(r.fecha)}</h1>
       <div className="card">
         <Ficha datos={[
-          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Lote", r.lotes?.codigo], ["Equipo / trabajador", r.equipos?.nombre ?? r.trabajadores?.nombre],
+          ["Finca", r.fincas?.nombre], ["Parcela", r.parcelas?.codigo], ["Lote", r.lotes?.codigo], ["Equipo / trabajador", r.equipos?.nombre ?? r.trabajadores?.nombre ?? r.trabajador_nombre],
           ["Personas", r.num_trabajadores], ["Horas por persona", num(r.horas_por_trabajador, 2)], ["De ellas, horas extra (por persona)", num(r.horas_extra_por_trabajador ?? 0, 2)], ["Horas totales", num(r.horas_totales, 2)], ["Día festivo", r.festivo ? "Sí (todas las horas a tarifa festiva)" : "No"],
           ["Entrada / salida", r.hora_entrada || r.hora_salida ? `${r.hora_entrada?.slice(0, 5) ?? "—"} – ${r.hora_salida?.slice(0, 5) ?? "—"}` : ""],
           ["Tipo de trabajo", r.tipo_trabajo], ["Actividad", r.actividad],

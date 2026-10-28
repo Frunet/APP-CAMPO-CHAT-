@@ -567,7 +567,7 @@ const FILAS = {
     iva_importe: z.number().nullable().optional(), observaciones: z.string().nullable().optional(),
   }),
   cosecha: z.object({
-    ...filaBase, parcela_id: z.string().uuid("Elige la parcela"), cultivo: z.string().min(1), variedad: z.string().nullable(),
+    ...filaBase, cultivo: z.string().min(1), variedad: z.string().nullable(),
     kg: z.number().positive(), cajas: z.number().int().min(0).nullable(), calidad: z.string().nullable(),
   }),
   parte: z.object({

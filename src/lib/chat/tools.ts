@@ -60,14 +60,27 @@ export const tools: Anthropic.Tool[] = [
     name: "proponer_parte_trabajo",
     description:
       "Prepara (NO guarda) un parte de trabajo. El usuario debe confirmarlo en pantalla. " +
-      "Si faltan finca, parcela, nº de trabajadores u horas, pregunta antes de llamar.",
+      "Si faltan finca, trabajadores u horas, pregunta antes de llamar. Con VARIOS trabajadores pide siempre sus nombres y usa «trabajadores»: se guarda una línea por trabajador, cada una con sus horas. " +
+      "Solo usa num_trabajadores + horas_por_trabajador si la persona dice que no puede o no quiere dar los nombres.",
     input_schema: {
       type: "object",
       properties: {
         fecha: { type: "string" }, finca: { type: "string" }, parcela: { type: "string" },
         lote: { type: "string", description: "Lote dentro de la parcela (opcional; solo si la parcela tiene lotes)" },
-        num_trabajadores: { type: "number" },
-        horas_por_trabajador: { type: "number", description: "Horas totales de cada persona ese día (incluidas las extra)" },
+        trabajadores: {
+          type: "array",
+          description: "UNA LÍNEA POR TRABAJADOR (usar siempre que se conozcan los nombres y haya más de uno): cada uno con sus horas. Si solo hay una persona con nombre, también.",
+          items: {
+            type: "object",
+            properties: {
+              nombre: { type: "string" }, horas: { type: "number", description: "Horas totales de esa persona ese día (incluidas las extra)" },
+              horas_extra: { type: "number", description: "De esas horas, cuántas son extra (opcional)" },
+            },
+            required: ["nombre", "horas"],
+          },
+        },
+        num_trabajadores: { type: "number", description: "Solo si NO se conocen los nombres (el usuario no quiere o no puede darlos)" },
+        horas_por_trabajador: { type: "number", description: "Horas totales de cada persona ese día (incluidas las extra); solo con num_trabajadores" },
         horas_extra_por_trabajador: { type: "number", description: "De esas horas, cuántas son extra por persona (opcional)" },
         festivo: { type: "boolean", description: "true si el usuario dice que fue festivo (los festivos dados de alta se detectan solos)" },
         equipo: { type: "string", description: "Cuadrilla/equipo (opcional); aplica las tarifas del equipo" },
@@ -76,12 +89,12 @@ export const tools: Anthropic.Tool[] = [
         tipo_trabajo: { type: "string" }, actividad: { type: "string" },
         coste_hora: { type: "number", description: "Solo si el usuario da un precio por hora normal" }, observaciones: { type: "string" },
       },
-      required: ["fecha", "finca", "num_trabajadores", "horas_por_trabajador"],
+      required: ["fecha", "finca"],
     },
   },
   {
     name: "proponer_cosecha",
-    description: "Prepara (NO guarda) un registro de cosecha para confirmación del usuario.",
+    description: "Prepara (NO guarda) un registro de cosecha para confirmación del usuario. La parcela es obligatoria solo si la finca tiene parcelas dadas de alta; si no las tiene, se registra a nivel de finca (no inventes una parcela).",
     input_schema: {
       type: "object",
       properties: {
@@ -91,7 +104,7 @@ export const tools: Anthropic.Tool[] = [
         cajas: { type: "number" }, calibre: { type: "string" }, calidad: { type: "string" },
         destino: { type: "string" }, observaciones: { type: "string" },
       },
-      required: ["fecha", "finca", "parcela", "cultivo", "kg"],
+      required: ["fecha", "finca", "cultivo", "kg"],
     },
   },
   {
@@ -173,7 +186,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
           : "No hay días con cosecha y horas en la misma parcela: no se calcula kg por trabajador-hora.";
         return {
           periodo: `${p.desde} a ${p.hasta}`, registros: rows.length, kg_total: round(sum(rows.map((r) => r.kg))),
-          por_parcela: agg((r) => r.parcelas?.codigo ?? "?"), por_variedad: agg((r) => r.variedad ?? "sin variedad"),
+          por_parcela: agg((r) => r.parcelas?.codigo ?? "sin parcela"), por_variedad: agg((r) => r.variedad ?? "sin variedad"),
           por_dia: agg((r) => r.fecha), kg_por_trabajador_hora: kgPorHora, nota_rendimiento,
           truncado: rows.length >= ROW_CAP,
         };
@@ -293,16 +306,61 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
 
 // ---------- Propuestas (requieren confirmación humana) ----------
 async function proponer(name: string, i: any, ctx: Ctx) {
-  const ref = await resolver(ctx.db, i.finca, i.parcela, i.lote);
+  // Una finca sin parcelas dadas de alta trabaja a nivel de finca: se ignora una «parcela» inventada con su mismo nombre
+  let sinParcelas = false;
+  if (i.finca) {
+    const f = await resolver(ctx.db, i.finca);
+    if (!esError(f) && f.finca_id) {
+      const { count } = await ctx.db.from("parcelas").select("id", { count: "exact", head: true }).eq("finca_id", f.finca_id);
+      sinParcelas = (count ?? 0) === 0;
+    }
+  }
+  const ref = await resolver(ctx.db, i.finca, sinParcelas ? undefined : i.parcela, sinParcelas ? undefined : i.lote);
   if (esError(ref)) return ref;
   if (name !== "proponer_tarea" && !ref.finca_id) return { error: "Falta la finca. Pregunta al usuario." };
-  if ((name === "proponer_cosecha") && !ref.parcela_id) return { error: "Falta la parcela. Pregunta al usuario." };
+  if (name === "proponer_cosecha" && !ref.parcela_id && !sinParcelas) return { error: "Falta la parcela (esta finca tiene parcelas: pregunta cuál; usa listar_fincas_parcelas para ver cuáles)." };
   if (name !== "proponer_tarea" || i.fecha) fecha.parse(i.fecha);
   if (name === "proponer_tarea" && i.semana) fecha.parse(i.semana);
 
   let tipo: string, payload: Record<string, unknown>, resumen: string;
   const lugar = `${ref.finca ?? "—"}${ref.parcela ? ` · parcela ${ref.parcela}` : ""}${ref.lote ? ` · lote ${ref.lote}` : ""}`;
-  if (name === "proponer_parte_trabajo") {
+  if (name === "proponer_parte_trabajo" && Array.isArray(i.trabajadores) && i.trabajadores.length) {
+    // Una línea por trabajador, con una sola confirmación
+    if (i.equipo || i.trabajador) return { error: "Con la lista «trabajadores» no uses equipo ni trabajador sueltos." };
+    if (i.trabajadores.length > 40) return { error: "Demasiados trabajadores en un parte (máximo 40)." };
+    const vistos = new Set<string>();
+    const lineas: { trabajador_id: string | null; trabajador_nombre: string | null; horas: number; horas_extra: number; nombre: string; enMaestros: boolean }[] = [];
+    for (const t of i.trabajadores) {
+      const nombre = String(t?.nombre ?? "").trim();
+      const horas = Number(t?.horas), extra = Number(t?.horas_extra ?? 0);
+      if (!nombre) return { error: "Falta el nombre de un trabajador. Pregunta." };
+      if (!(horas > 0) || horas > 24) return { error: `Las horas de ${nombre} deben estar entre 0 y 24. Pregunta.` };
+      if (!(extra >= 0) || extra > horas) return { error: `Las horas extra de ${nombre} no pueden superar sus horas. Pregunta.` };
+      if (vistos.has(nombre.toLowerCase())) return { error: `${nombre} aparece dos veces en el parte.` };
+      vistos.add(nombre.toLowerCase());
+      const p: any = await resolverPersonal(ctx.db, ref.finca_id, undefined, nombre);
+      if (p.error && /ambiguo/.test(p.error)) return p; // varios con ese nombre: hay que preguntar
+      lineas.push(p.trabajador_id
+        ? { trabajador_id: p.trabajador_id, trabajador_nombre: null, horas, horas_extra: extra, nombre: p.nombre, enMaestros: true }
+        : { trabajador_id: null, trabajador_nombre: nombre, horas, horas_extra: extra, nombre, enMaestros: false });
+    }
+    const total = round(lineas.reduce((a, l) => a + l.horas, 0));
+    const sinAlta = lineas.filter((l) => !l.enMaestros).map((l) => l.nombre);
+    tipo = "registrar_parte_lineas";
+    payload = {
+      comun: {
+        fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id ?? null, lote_id: ref.lote_id ?? null, festivo: i.festivo === true,
+        hora_entrada: i.hora_entrada ?? null, hora_salida: i.hora_salida ?? null, tipo_trabajo: i.tipo_trabajo ?? null, actividad: i.actividad ?? null,
+        coste_hora: i.coste_hora ?? null, observaciones: i.observaciones ?? null, origen: "chat",
+      },
+      lineas: lineas.map(({ trabajador_id, trabajador_nombre, horas, horas_extra }) => ({ trabajador_id, trabajador_nombre, horas, horas_extra })),
+    };
+    resumen = `Parte de trabajo · ${i.fecha} · ${lugar}\n${lineas.length} línea${lineas.length > 1 ? "s" : ""} (una por trabajador):\n` +
+      lineas.map((l) => `• ${l.nombre}: ${l.horas} h${l.horas_extra > 0 ? ` (${l.horas_extra} extra)` : ""}`).join("\n") + `\nTotal ${total} h` +
+      (i.festivo === true ? "\nDía festivo" : "") + (i.actividad ? `\nActividad: ${i.actividad}` : "") +
+      (sinAlta.length ? `\n⚠ Sin alta en Maestros → Personal (quedarán «sin tarifa»): ${sinAlta.join(", ")}` : "\nCoste: con las tarifas de cada trabajador en Maestros");
+  } else if (name === "proponer_parte_trabajo") {
+    if (!(Number(i.num_trabajadores) > 0) || !(Number(i.horas_por_trabajador) > 0)) return { error: "Faltan los trabajadores con sus horas (o, si no hay nombres, el nº de personas y las horas por persona). Pregunta." };
     const personal = await resolverPersonal(ctx.db, ref.finca_id, i.equipo, i.trabajador);
     if (esError(personal as any)) return personal;
     const extra = Number(i.horas_extra_por_trabajador ?? 0);
@@ -328,7 +386,7 @@ async function proponer(name: string, i: any, ctx: Ctx) {
   } else if (name === "proponer_cosecha") {
     tipo = "registrar_cosecha";
     payload = {
-      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id, lote_id: ref.lote_id ?? null, cultivo: i.cultivo,
+      fecha: i.fecha, finca_id: ref.finca_id, parcela_id: ref.parcela_id ?? null, lote_id: ref.lote_id ?? null, cultivo: i.cultivo,
       variedad: i.variedad ?? null, kg: i.kg, cajas: i.cajas ?? null, calibre: i.calibre ?? null,
       calidad: i.calidad ?? null, destino: i.destino ?? null, observaciones: i.observaciones ?? null, origen: "chat",
     };

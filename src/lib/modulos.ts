@@ -45,7 +45,7 @@ function filtrar(q: any, f: FM, o: { campana?: boolean; fechaCol?: string } = {}
 export async function datosTrabajo(db: Db, f: FM) {
   const q = filtrar(
     db.from("partes_trabajo")
-      .select("id,fecha,num_trabajadores,horas_por_trabajador,horas_totales,coste_hora,coste_total,tipo_trabajo,actividad,origen,observaciones,horas_extra_por_trabajador,horas_extra_totales,festivo,fincas(nombre),parcelas(codigo),lotes(codigo),equipos(nombre),trabajadores(nombre)")
+      .select("id,fecha,num_trabajadores,horas_por_trabajador,horas_totales,coste_hora,coste_total,tipo_trabajo,actividad,origen,observaciones,horas_extra_por_trabajador,horas_extra_totales,festivo,trabajador_nombre,fincas(nombre),parcelas(codigo),lotes(codigo),equipos(nombre),trabajadores(nombre)")
       .order("fecha", { ascending: false }).limit(CAP), f);
   const { data, error } = await q;
   const filas = (data ?? []) as any[];
@@ -53,7 +53,7 @@ export async function datosTrabajo(db: Db, f: FM) {
   const tabla: TablaExport = {
     titulo: "Partes de trabajo",
     columnas: ["Fecha", "Finca", "Parcela", "Lote", "Equipo / trabajador", "Personas", "Horas por persona", "Horas extra (por persona)", "Horas totales", "Festivo", "Tipo de trabajo", "Actividad", "Coste/hora normal", "Coste total", "Origen", "Observaciones"],
-    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.lotes?.codigo ?? "", r.equipos?.nombre ?? r.trabajadores?.nombre ?? "", r.num_trabajadores,
+    filas: filas.map((r) => [dmy(r.fecha), r.fincas?.nombre ?? "", r.parcelas?.codigo ?? "", r.lotes?.codigo ?? "", r.equipos?.nombre ?? r.trabajadores?.nombre ?? r.trabajador_nombre ?? "", r.num_trabajadores,
       Number(r.horas_por_trabajador), Number(r.horas_extra_por_trabajador ?? 0), Number(r.horas_totales), r.festivo ? "Sí" : "No", r.tipo_trabajo ?? "", r.actividad ?? "",
       r.coste_hora == null ? "" : Number(r.coste_hora), r.coste_total == null ? "sin tarifa" : Number(r.coste_total), r.origen ?? "", r.observaciones ?? ""]),
     soloExcel: [10, 12, 14, 15],
@@ -74,7 +74,7 @@ export async function datosCosechas(db: Db, f: FM) {
   const { data, error } = await q;
   const filas = (data ?? []) as any[];
   const porParcela = new Map<string, number>();
-  filas.forEach((r) => { const k = `${r.fincas?.nombre} · ${r.parcelas?.codigo}`; porParcela.set(k, (porParcela.get(k) ?? 0) + Number(r.kg)); });
+  filas.forEach((r) => { const k = `${r.fincas?.nombre} · ${r.parcelas?.codigo ?? "sin parcela"}`; porParcela.set(k, (porParcela.get(k) ?? 0) + Number(r.kg)); });
   const tabla: TablaExport = {
     titulo: "Cosechas",
     columnas: ["Fecha", "Finca", "Parcela", "Lote", "Cultivo", "Variedad", "Campaña", "Kg", "Cajas", "Calibre", "Calidad", "Destino", "Equipo", "Observaciones"],

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { CAP, datosCosechas, datosGastos, datosTrabajo, leerFM, type FM } from "@/lib/modulos";
+import { datosNominas, tablasNominas } from "@/lib/nominas";
+import { leerPeriodo } from "@/lib/resultados";
 import { construirVista, leerConsulta, tablaComparativa, tablaConsolidada, tablaDetalle, pct, valorDe, filasCuenta } from "@/lib/resultados";
 import { CATEGORIAS_CG, imputacionCampana } from "@/lib/costes-generales";
 import { excelDeDoc, pdfDeDoc, type Doc } from "@/lib/informes-export";
@@ -20,6 +22,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ modulo: string 
 
   const url = new URL(req.url);
   if (modulo === "resultados") return cuentaResultados(db, url);
+  if (modulo === "nominas") return nominas(db, auth.user.id, url);
   if (modulo === "diario") return diarioFincas(db, url);
   if (modulo === "costes-generales") return costesGenerales(db, auth.user.id, url);
   const formato = url.searchParams.get("formato") === "pdf" ? "pdf" : "xlsx";
@@ -165,6 +168,28 @@ async function diarioFincas(db: Awaited<ReturnType<typeof createClient>>, url: U
     resumen: [["Periodo", desde || hasta ? `${desde ? dmy(desde) : "inicio"} a ${hasta ? dmy(hasta) : "hoy"}` : "Todo el histórico"], ["Anotaciones", filas.length]], notas: [],
   };
   const nombre = `diario-fincas_${new Date().toISOString().slice(0, 10)}`;
+  if (url.searchParams.get("formato") === "pdf")
+    return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
+  return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });
+}
+
+// Nóminas: horas y coste por trabajador (administrador y responsables; la RLS limita a sus fincas)
+async function nominas(db: Awaited<ReturnType<typeof createClient>>, uid: string, url: URL) {
+  const { data: perfil } = await db.from("profiles").select("rol").eq("id", uid).maybeSingle();
+  if (perfil?.rol !== "administrador" && perfil?.rol !== "responsable") return NextResponse.json({ error: "Solo responsables y administradores pueden descargar las nóminas" }, { status: 403 });
+  const [{ data: fs }, { data: cs }] = await Promise.all([db.from("fincas").select("id,nombre").eq("activa", true).order("nombre"), db.from("campanas").select("id,nombre,fecha_inicio,fecha_fin").order("fecha_inicio", { ascending: false })]);
+  const sp = Object.fromEntries(url.searchParams) as Record<string, string>;
+  const { p } = leerPeriodo({ tipo: "mes", ...sp }, (cs ?? []) as any[]);
+  const f = /^[0-9a-f-]{36}$/i.test(sp.finca ?? "") ? sp.finca : null;
+  const fincas = ((fs ?? []) as { id: string; nombre: string }[]).filter((x) => !f || x.id === f);
+  const res = await datosNominas(db, fincas.map((x) => x.id), p.desde, p.hasta);
+  const sin = res.reduce((a, g) => a + g.sinTarifa, 0);
+  const doc: Doc = {
+    titulo: "Nóminas: horas y coste por trabajador", horizontal: true, maxFilasPdf: 3000, tablas: tablasNominas(res),
+    resumen: [["Periodo", `${p.etiqueta} (${dmy(p.desde)} a ${dmy(p.hasta)})`], ["Fincas", fincas.map((x) => x.nombre).join(", ")], ["Trabajadores", res.length], ["Horas totales", num(res.reduce((a, g) => a + g.horas, 0))], ["Coste (€)", num(res.reduce((a, g) => a + g.coste, 0))]],
+    notas: [...(sin ? [`${sin} línea(s) sin tarifa: el coste es parcial.`] : []), "Calculado al momento con los partes de trabajo. Los trabajadores sin alta en Maestros → Personal no tienen tarifa propia."],
+  };
+  const nombre = `nominas_${new Date().toISOString().slice(0, 10)}`;
   if (url.searchParams.get("formato") === "pdf")
     return new NextResponse(new Uint8Array(await pdfDeDoc(doc)), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${nombre}.pdf"` } });
   return new NextResponse(new Uint8Array(excelDeDoc(doc)), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${nombre}.xlsx"` } });

@@ -42,7 +42,7 @@ export default async function Trabajo({ searchParams }: { searchParams: Promise<
             {d.filas.slice(0, MOSTRAR).map((r: any) => (
               <tr key={r.id}>
                 <td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{r.parcelas?.codigo ?? "—"}{r.lotes?.codigo ? ` / ${r.lotes.codigo}` : ""}</td>
-                <td className="td">{r.equipos?.nombre ?? r.trabajadores?.nombre ?? "—"}</td>
+                <td className="td">{r.equipos?.nombre ?? r.trabajadores?.nombre ?? r.trabajador_nombre ?? "—"}</td>
                 <td className="td">{r.num_trabajadores}</td><td className="td">{num(r.horas_por_trabajador, 2)}</td><td className="td">{Number(r.horas_extra_por_trabajador) > 0 ? num(r.horas_extra_por_trabajador, 2) : "—"}</td><td className="td">{num(r.horas_totales, 2)}{r.festivo && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800">festivo</span>}</td>
                 <td className="td">{r.actividad ?? r.tipo_trabajo ?? "—"}</td>
                 <td className="td">{r.coste_total == null ? <span className="text-xs text-amber-600">sin tarifa</span> : eur(r.coste_total)}</td>

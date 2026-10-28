@@ -97,7 +97,7 @@ export default function RevisionTabla({
             <fieldset disabled={hecho || !puedeImportar} className="grid gap-2 sm:grid-cols-4">
               <label className="text-xs">Fecha<input type="date" className={inp} value={f.fecha} onChange={(e) => set(i, "fecha", e.target.value)} /></label>
               {!esFactura && (
-                <label className="text-xs">Parcela{f.tipo === "cosecha" ? " *" : ""}
+                <label className="text-xs">Parcela
                   <select className={inp} value={parcelaId(f) ?? ""} onChange={(e) => set(i, "parcela", e.target.value)}>
                     <option value="">{sinParcela ? `«${f.parcela}» no existe` : "—"}</option>
                     {parcelasDe(f).map((p) => <option key={p.id} value={p.id}>{p.codigo}</option>)}

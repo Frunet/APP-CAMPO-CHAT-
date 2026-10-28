@@ -66,7 +66,7 @@ export async function construirInforme(db: SupabaseClient, f: Filtros) {
   const porDia = agrupa(cosechas, (r) => r.fecha, (r) => Number(r.kg)).sort((a, b) => a.k.localeCompare(b.k));
   const porParcelaRaw = new Map<string, { kg: number; ha: number | null; horas: number }>();
   cosechas.forEach((r) => {
-    const k = r.parcelas?.codigo ?? "?";
+    const k = r.parcelas?.codigo ?? "sin parcela";
     const e = porParcelaRaw.get(k) ?? { kg: 0, ha: r.parcelas?.superficie_ha ?? null, horas: 0 };
     e.kg += Number(r.kg); porParcelaRaw.set(k, e);
   });

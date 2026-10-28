@@ -179,7 +179,7 @@ export async function buscarRegistros(i: any, ctx: Ctx): Promise<unknown> {
   if (!t.success) return { error: "tipo debe ser parte, cosecha o gasto." };
   const tipo = t.data;
   const cols = {
-    parte: "id,fecha,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,festivo,actividad,tipo_trabajo,coste_total,fincas(nombre),parcelas(codigo),lotes(codigo),equipos(nombre),trabajadores(nombre)",
+    parte: "id,fecha,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,festivo,trabajador_nombre,actividad,tipo_trabajo,coste_total,fincas(nombre),parcelas(codigo),lotes(codigo),equipos(nombre),trabajadores(nombre)",
     cosecha: "id,fecha,cultivo,variedad,kg,cajas,calidad,destino,fincas(nombre),parcelas(codigo),lotes(codigo)",
     gasto: "id,fecha,proveedor,categoria,concepto,importe,moneda,tipo_importe,fincas(nombre),parcelas(codigo),lotes(codigo)",
   }[tipo];
@@ -236,7 +236,7 @@ export async function proponerCorreccion(i: any, ctx: Ctx): Promise<unknown> {
   if (!reg) return { error: "No encuentro ese registro (o no tienes acceso). Búscalo de nuevo con buscar_registros." };
 
   const upd: Record<string, unknown> = { ...norm.escalares };
-  const antes: Record<string, unknown> = { ...reg, parcela: reg.parcelas?.codigo, lote: reg.lotes?.codigo, equipo: reg.equipos?.nombre, trabajador: reg.trabajadores?.nombre };
+  const antes: Record<string, unknown> = { ...reg, parcela: reg.parcelas?.codigo, lote: reg.lotes?.codigo, equipo: reg.equipos?.nombre, trabajador: reg.trabajadores?.nombre ?? reg.trabajador_nombre };
   const despues: Record<string, unknown> = { ...norm.escalares };
 
   // Parcela y lote por nombre; al cambiar de parcela el lote se reinicia
