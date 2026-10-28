@@ -4,6 +4,7 @@ import { DEMO } from "@/lib/demo/config";
 import { aplicarAnulacion, aplicarCorreccion } from "@/lib/chat/correcciones";
 import { aplicarRecepcion } from "@/lib/chat/documentos";
 import { aplicarTarea } from "@/lib/chat/tareas";
+import { aplicarMemoria } from "@/lib/chat/memoria";
 
 const DESTINO: Record<string, string> = {
   registrar_parte: "partes_trabajo",
@@ -57,6 +58,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
     return NextResponse.json({ ok: true, estado: "confirmada", tabla: "tareas", registroId: r.id });
+  }
+
+  // Memoria de la empresa: guardar una decisión o darla de baja
+  if (accion.tipo === "guardar_memoria" || accion.tipo === "olvidar_memoria") {
+    const r = await aplicarMemoria(db, accion.tipo, accion.payload, auth.user.id);
+    if (!r.ok) {
+      await db.from("acciones_pendientes").update({ estado: "pendiente", resuelta_at: null }).eq("id", id);
+      return NextResponse.json({ error: r.error }, { status: 400 });
+    }
+    await db.from("acciones_pendientes").update({ resultado_id: r.id }).eq("id", id);
+    return NextResponse.json({ ok: true, estado: "confirmada", tabla: "memoria_chat", registroId: r.id });
   }
 
   // Marcar como recibido un documento esperado

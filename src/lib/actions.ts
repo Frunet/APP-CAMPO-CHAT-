@@ -342,6 +342,29 @@ export async function eliminarEmpresaPropia(fd: FormData): Promise<Res> {
   });
 }
 
+// ---------- memoria del chat (administrador): alta manual, baja y reactivación ----------
+export async function crearMemoria(fd: FormData): Promise<Res> {
+  return run(["/maestros"], async ({ db, uid }) => {
+    await exigirAdmin(db);
+    const p = z.object({ texto: z.string().trim().min(3, "Escribe la decisión o regla").max(600, "Máximo 600 caracteres"), tipo: z.enum(["decision", "regla", "dato"]) })
+      .parse({ texto: s(fd, "texto") ?? "", tipo: s(fd, "tipo") ?? "decision" });
+    const { error } = await db.from("memoria_chat").insert({ ...p, finca_id: s(fd, "finca_id"), created_by: uid });
+    check(error);
+    return "Guardado en la memoria: el chat lo tendrá en cuenta desde la próxima conversación o mensaje.";
+  });
+}
+
+export async function alternarMemoria(fd: FormData): Promise<Res> {
+  return run(["/maestros"], async ({ db }) => {
+    await exigirAdmin(db);
+    const id = z.string().uuid().parse(s(fd, "id"));
+    const { data, error } = await db.from("memoria_chat").update({ activa: fd.get("activa") === "true", updated_at: new Date().toISOString() }).eq("id", id).select("id");
+    check(error);
+    if (!data?.length) throw { message: "No se pudo actualizar." };
+    return "Memoria actualizada.";
+  });
+}
+
 // Catálogo de cultivos y variedades
 export async function crearCultivoMaestro(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {

@@ -8,6 +8,7 @@ import SeccionPersonal from "@/components/maestros/SeccionPersonal";
 import SeccionCostes from "@/components/maestros/SeccionCostes";
 import SeccionProveedores from "@/components/maestros/SeccionProveedores";
 import SeccionFacturas from "@/components/maestros/SeccionFacturas";
+import SeccionMemoria from "@/components/maestros/SeccionMemoria";
 
 const SECCIONES = [
   ["usuarios", "Usuarios y fincas asignadas"],
@@ -17,6 +18,7 @@ const SECCIONES = [
   ["costes", "Costes generales"],
   ["proveedores", "Proveedores"],
   ["facturas", "Lectura de facturas"],
+  ["memoria", "Memoria del chat"],
 ] as const;
 
 export default async function Maestros({ searchParams }: { searchParams: Promise<{ seccion?: string; campana?: string }> }) {
@@ -42,6 +44,7 @@ export default async function Maestros({ searchParams }: { searchParams: Promise
       {activa === "fincas" && <SeccionFincas ctx={ctx} />}
       {activa === "cultivos" && <SeccionCultivos ctx={ctx} />}
       {activa === "personal" && <SeccionPersonal ctx={ctx} />}
+      {activa === "memoria" && <SeccionMemoria ctx={ctx} />}
       {activa === "facturas" && <SeccionFacturas ctx={ctx} />}
       {activa === "proveedores" && <SeccionProveedores ctx={ctx} />}
       {activa === "costes" && <SeccionCostes ctx={ctx} campana={campana} />}

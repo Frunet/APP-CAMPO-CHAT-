@@ -194,14 +194,14 @@ export default function ChatClient() {
                   {a.estado === "pendiente" ? (
                     <div className="mt-2 flex gap-2">
                       <button className={a.tipo === "anular_registro" ? "btn !bg-red-700 !px-3 !py-1 hover:!bg-red-800" : "btn !px-3 !py-1"} onClick={() => decidir(m.id, a.id, "confirmar")}>
-                        {a.tipo === "anular_registro" ? "🗑 Confirmar anulación" : a.tipo === "corregir_registro" ? "✔ Confirmar corrección" : a.tipo === "asignar_tarea" ? "📅 Confirmar asignación" : "✔ Confirmar y guardar"}
+                        {a.tipo === "anular_registro" ? "🗑 Confirmar anulación" : a.tipo === "corregir_registro" ? "✔ Confirmar corrección" : a.tipo === "asignar_tarea" ? "📅 Confirmar asignación" : a.tipo === "guardar_memoria" ? "🧠 Guardar en la memoria" : a.tipo === "olvidar_memoria" ? "🧠 Dar de baja de la memoria" : "✔ Confirmar y guardar"}
                       </button>
                       <button className="btn-ghost !px-3 !py-1" onClick={() => decidir(m.id, a.id, "cancelar")}>✕ Cancelar</button>
                     </div>
                   ) : (
                     <p className={`mt-1 text-xs font-semibold ${a.estado === "confirmada" ? "text-green-700" : a.estado === "caducada" ? "text-amber-700" : "text-stone-500"}`}>
                       {a.estado === "confirmada"
-                        ? a.tipo === "anular_registro" ? "✔ Registro anulado (queda en el historial)" : a.tipo === "corregir_registro" ? "✔ Corrección guardada (queda en el historial)" : a.tipo === "asignar_tarea" ? "✔ Tarea asignada en el calendario" : "✔ Guardado en la base de datos"
+                        ? a.tipo === "anular_registro" ? "✔ Registro anulado (queda en el historial)" : a.tipo === "corregir_registro" ? "✔ Corrección guardada (queda en el historial)" : a.tipo === "asignar_tarea" ? "✔ Tarea asignada en el calendario" : a.tipo === "guardar_memoria" ? "✔ Guardado en la memoria de la empresa" : a.tipo === "olvidar_memoria" ? "✔ Dado de baja de la memoria" : "✔ Guardado en la base de datos"
                         : a.estado === "caducada" ? "El registro cambió desde que se propuso: vuelve a pedirlo desde el chat." : "Cancelado"}
                     </p>
                   )}
