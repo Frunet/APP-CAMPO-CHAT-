@@ -83,7 +83,8 @@ async function llamar(url: string, cuerpo: unknown, intentos = 3): Promise<any> 
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" }, body: JSON.stringify(cuerpo) });
     if (r.ok) return r.json();
     const txt = await r.text();
-    ultimo = Object.assign(new Error(`Gemini ${r.status}: ${txt.slice(0, 300)}`), { status: r.status });
+    ultimo = Object.assign(new Error(`Gemini ${r.status}: ${txt.slice(0, 300)}`), { status: r.status, diario: r.status === 429 && /PerDay/.test(txt) });
+    if (r.status === 429 && /PerDay/.test(txt)) break; // límite diario de la clave gratuita: reintentar no sirve
     if (r.status === 429 || r.status === 503) { await new Promise((ok) => setTimeout(ok, 2500 * (i + 1))); continue; }
     break;
   }
@@ -103,7 +104,15 @@ export async function crearConGemini(p: { model: string; system?: string; messag
     cuerpo.tools = [{ functionDeclarations: p.tools.map((t) => ({ name: t.name, description: t.description ?? "", parameters: limpiarSchema(t.input_schema ?? { type: "object", properties: {} }) })) }];
     cuerpo.toolConfig = { functionCallingConfig: { mode: "AUTO" } };
   }
-  const j = await llamar(`${BASE}/models/${encodeURIComponent(modelo)}:generateContent`, cuerpo);
+  const url = (m: string) => `${BASE}/models/${encodeURIComponent(m)}:generateContent`;
+  let j: any;
+  try { j = await llamar(url(modelo), cuerpo); }
+  catch (e: any) {
+    // Agotado el cupo diario del modelo potente: seguir con el ligero en vez de dejar el chat parado
+    const ligero = process.env.GEMINI_MODEL_SIMPLE;
+    if (e?.diario && ligero && ligero !== modelo) j = await llamar(url(ligero), cuerpo);
+    else throw e;
+  }
   const cand = j.candidates?.[0];
   if (!cand?.content?.parts?.length) {
     const motivo = j.promptFeedback?.blockReason ?? cand?.finishReason ?? "sin respuesta";
