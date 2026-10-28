@@ -29,26 +29,85 @@ export default function ChatClient() {
   }, []);
   const guarda = (k: string, v: boolean) => { try { localStorage.setItem(k, v ? "1" : "0"); } catch { /* ignorar */ } };
 
+  // La conversación abierta y lo que se está escribiendo sobreviven a cambiar de módulo o recargar (por usuario)
+  const uid = useRef<string>("");
+  const claveConv = () => `chat_conv_${uid.current}`;
+  const claveBorr = () => `chat_borrador_${uid.current}`;
+  const clavePend = () => `chat_pendiente_${uid.current}`;
+  function guardarLS(k: string, v: string | null) { try { if (v == null || v === "") localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } }
+  function leerLS(k: string) { try { return localStorage.getItem(k); } catch { return null; } }
+  const [esperando, setEsperando] = useState<string | null>(null); // mensaje enviado al salir, cuya respuesta aún no se ha guardado
+
   const cargarConvs = useCallback(async () => {
     const { data } = await db.from("chat_conversaciones").select("id,titulo,updated_at").order("updated_at", { ascending: false }).limit(50);
     setConvs(data ?? []);
   }, [db]);
   useEffect(() => { cargarConvs(); }, [cargarConvs]);
+
+  // Al entrar: reabrir la última conversación y recuperar el borrador (y el mensaje que se estaba enviando al salir)
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const { data } = await db.auth.getSession();
+      uid.current = data.session?.user.id ?? "anon";
+      const borr = leerLS(claveBorr()), pend = leerLS(clavePend()), id = leerLS(claveConv());
+      let lista: Msg[] | null = null;
+      if (id && vivo) { lista = await abrir(id); if (!lista) guardarLS(claveConv(), null); }
+      if (!vivo) return;
+      const guardado = (l: Msg[] | null) => { const i = (l ?? []).map((x) => x.texto?.trim()).lastIndexOf(pend?.trim() ?? ""); return i >= 0 && (l ?? []).slice(i + 1).some((x) => x.rol === "assistant"); };
+      if (pend && guardado(lista)) guardarLS(clavePend(), null);                // ya se guardó con su respuesta
+      else if (pend) { setEsperando(pend); if (id) setConvId(id); }             // se salió mientras respondía: se espera a que el servidor termine
+      if (borr) setTexto((p) => p || borr);
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { if (uid.current) guardarLS(claveConv(), convId ?? null); }, [convId]);
+  useEffect(() => { if (uid.current) guardarLS(claveBorr(), texto); }, [texto]);
+  // Si se salió mientras el asistente respondía, se espera a que termine (el servidor lo guarda al acabar); si no llega, el mensaje vuelve al cuadro
+  useEffect(() => {
+    if (esperando == null) return;
+    let n = 0;
+    const t = setInterval(async () => {
+      n++;
+      const id = convId ?? leerLS(claveConv());
+      const lista = id ? await abrir(id, true) : null;
+      const i = (lista ?? []).map((x) => x.texto?.trim()).lastIndexOf(esperando.trim());
+      const llego = i >= 0 && (lista ?? []).slice(i + 1).some((x) => x.rol === "assistant");
+      if (llego || n >= 25) {
+        clearInterval(t); setEsperando(null); guardarLS(clavePend(), null);
+        if (!llego) setTexto((p) => p || esperando);
+        else if (id) { setConvId(id); cargarConvs(); }
+      }
+    }, 3000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esperando]);
   useEffect(() => { fin.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
-  async function abrir(id: string) {
-    setConvId(id); setHistorial(false);
-    const [{ data: m }, { data: acc }] = await Promise.all([
+  async function abrir(id: string, silencioso = false): Promise<Msg[] | null> {
+    const [{ data: c }, { data: m }, { data: acc }] = await Promise.all([
+      db.from("chat_conversaciones").select("id").eq("id", id).maybeSingle(),
       db.from("chat_mensajes").select("id,rol,texto").eq("conversacion_id", id).not("texto", "is", null).order("created_at"),
       db.from("acciones_pendientes").select("id,resumen,tipo,estado").eq("conversacion_id", id).order("created_at"),
     ]);
+    if (!c) return null; // no existe o no es de este usuario
+    if (!silencioso) { setConvId(id); setHistorial(false); }
     const pend = (acc ?? []) as Accion[];
-    setMsgs([
-      ...((m ?? []) as Msg[]),
+    const lista = ((m ?? []) as Msg[]).map((x) => ({ ...x }));
+    // las tarjetas de revisión de documentos se recomponen a partir del id que queda en el mensaje del documento adjunto
+    lista.forEach((x, k) => {
+      const id_ = x.rol === "user" ? /\(id ([0-9a-f-]{36})\)/i.exec(x.texto ?? "")?.[1] : undefined;
+      if (id_ && lista[k + 1]?.rol === "assistant") lista[k + 1].documentos = [id_];
+    });
+    const completa = [
+      ...lista,
       ...(pend.length ? [{ id: "acc", rol: "assistant" as const, texto: "Acciones de esta conversación:", acciones: pend }] : []),
-    ]);
+    ];
+    setMsgs(completa);
+    return lista;
   }
-  function nueva() { setConvId(undefined); setMsgs([]); setHistorial(false); }
+  function nueva() { setConvId(undefined); setMsgs([]); setHistorial(false); guardarLS(claveConv(), null); }
 
   function hablar(t: string, alTerminar?: () => void) {
     if (typeof speechSynthesis === "undefined") return alTerminar?.();
@@ -63,13 +122,14 @@ export default function ChatClient() {
   async function enviarTexto(t: string) {
     t = t.trim();
     if (!t || refs.current.enviando) return;
+    guardarLS(clavePend(), t); guardarLS(claveBorr(), null);
     setTexto(""); setEnviando(true); refs.current.enviando = true;
     setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "user", texto: t }]);
     try {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversacionId: refs.current.convId }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Error");
-      setConvId(j.conversacionId); refs.current.convId = j.conversacionId;
+      setConvId(j.conversacionId); refs.current.convId = j.conversacionId; guardarLS(clavePend(), null);
       setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: j.texto, acciones: j.acciones.map((a: any) => ({ ...a, estado: "pendiente" })), documentos: j.documentos ?? [] }]);
       cargarConvs();
       if (refs.current.leer || refs.current.manos) {
@@ -211,7 +271,7 @@ export default function ChatClient() {
             </div>
           </div>
         ))}
-        {enviando && <p className="text-sm text-stone-400">Consultando…</p>}
+        {(enviando || esperando != null) && <p className="text-sm text-stone-400">Consultando…</p>}
         <div ref={fin} />
       </div>
 
