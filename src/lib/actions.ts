@@ -214,7 +214,7 @@ export async function eliminarCosteGeneral(fd: FormData): Promise<Res> {
 }
 
 // ---------- cuenta de resultados: ventas, registros sin factura, proveedores, categoría de los gastos ----------
-// Los permisos los impone la base de datos (RLS): solo responsables y administrador en sus fincas.
+// Los permisos los impone la base de datos (RLS): registran encargados, responsables y administrador en sus fincas; borrar, solo responsables y administrador.
 const RUTAS_RES = ["/resultados", "/gastos", "/maestros"];
 const CATEGORIAS_RES = ["insumos", "suministros", "consumibles", "mano_obra", "reparaciones", "otros_gastos", "personal_fijo", "servicios_profesionales", "instalaciones", "gastos_generales", "gastos_financieros"] as const;
 const TIPO_A_CATEGORIA: Record<string, string> = { jornal: "mano_obra", nomina: "personal_fijo", prestamo: "gastos_financieros", tributo: "gastos_generales" };

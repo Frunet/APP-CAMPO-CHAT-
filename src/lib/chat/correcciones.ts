@@ -229,7 +229,6 @@ export async function proponerCorreccion(i: any, ctx: Ctx): Promise<unknown> {
   const { tipo, id } = e;
   const rol = await rolDe(ctx.db, ctx.userId);
   if (!rol || rol === "consulta") return { error: "Tu rol es de solo consulta: no puedes corregir registros." };
-  if (tipo === "gasto" && rol === "encargado") return { error: "Los gastos solo los pueden corregir un responsable o un administrador." };
 
   const norm = normalizarCambios(tipo, i.cambios);
   if ("error" in norm) return norm;

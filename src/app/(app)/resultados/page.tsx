@@ -173,7 +173,7 @@ export default async function Resultados({ searchParams }: { searchParams: Promi
                     <td className="td">{ORIGENES[l.origen] ?? l.origen}</td><td className="td">{l.texto}</td>
                     <td className="td text-right">{eur(l.importe)}</td>
                     <td className="td">
-                      {l.origen === "factura_recibida" && l.ref_id && ctx.puedeGestionar && (
+                      {l.origen === "factura_recibida" && l.ref_id && ctx.puedeRegistrar && (
                         <ActionForm action={cambiarCategoriaGasto} label="Mover" reset={false} className="flex items-center gap-1">
                           <input type="hidden" name="id" value={l.ref_id} />
                           <select name="categoria" className="input !py-1 text-xs" defaultValue={l.categoria}>{CAT_GASTO.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
@@ -202,7 +202,7 @@ export default async function Resultados({ searchParams }: { searchParams: Promi
       </p>
 
       {/* ----- registrar ----- */}
-      {ctx.puedeGestionar ? (
+      {ctx.puedeRegistrar ? (
         <div className="grid gap-3 md:grid-cols-2">
           <details className="card">
             <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Registrar una venta (factura emitida)</summary>
@@ -236,7 +236,7 @@ export default async function Resultados({ searchParams }: { searchParams: Promi
           </details>
         </div>
       ) : (
-        <p className="text-xs text-stone-500">Solo responsables y administradores pueden registrar ventas y gastos sin factura.</p>
+        <p className="text-xs text-stone-500">Tu rol es de solo consulta: no puedes registrar ventas ni gastos sin factura.</p>
       )}
     </div>
   );
