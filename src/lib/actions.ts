@@ -1,4 +1,5 @@
 "use server";
+import { buscarTrabajador } from "@/lib/documentos/nombres";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -662,19 +663,9 @@ export async function importarHoras(fd: FormData): Promise<Res> {
     if (!doc?.datos_extraidos?.hoja_horas) throw { message: "Este documento no es una hoja de horas." };
     const regs: any[] = doc.datos_extraidos.registros ?? [];
     const ya = new Set<number>(doc.datos_extraidos.importados ?? []);
-    const nm = (x: unknown) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const sinParentesis = (x: unknown) => nm(String(x ?? "").replace(/\(.*?\)/g, " "));
-
     const { data: trab } = await db.from("trabajadores").select("id,nombre,finca_id").eq("activo", true);
     const lista = (trab ?? []) as { id: string; nombre: string; finca_id: string | null }[];
-    const buscar = (nombre: string, finca: string) => {
-      const ok = lista.filter((t) => !t.finca_id || t.finca_id === finca);
-      for (const f of [nm, sinParentesis]) {
-        const m = ok.filter((t) => f(t.nombre) === f(nombre));
-        if (m.length === 1) return m[0].id;
-      }
-      return null;
-    };
+    const buscar = (nombre: string, finca: string) => buscarTrabajador(nombre, lista.filter((t) => !t.finca_id || t.finca_id === finca))?.id ?? null;
 
     const hechos: number[] = [], saltadas: string[] = [], duplicadas: number[] = [], fallos: string[] = [];
     const sinFinca = new Set<string>();

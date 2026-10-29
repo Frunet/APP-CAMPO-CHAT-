@@ -4,11 +4,11 @@ import ActionForm from "./ActionForm";
 import type { FincaOpt } from "./FincaParcela";
 import { createClient } from "@/lib/supabase/browser";
 import { importarHoras } from "@/lib/actions";
+import { buscarTrabajador } from "@/lib/documentos/nombres";
 
 type Reg = { fecha: string | null; finca_ref: string | null; trabajador_nombre: string; horas: number | null; horas_extra: number; tipo_trabajo: string | null; hoja: string; fila: number; dudas: string[] };
 
 const nm = (x: unknown) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-const sinParentesis = (x: unknown) => nm(String(x ?? "").replace(/\(.*?\)/g, " "));
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const dmy = (s: string) => s.split("-").reverse().join("/");
 
@@ -53,7 +53,7 @@ export default function RevisionHoras({
     }
     return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [pendientes]);
-  const enMaestros = (nombre: string) => !!personal?.some((p) => nm(p) === nm(nombre) || sinParentesis(p) === sinParentesis(nombre));
+  const enMaestros = (nombre: string) => !!personal && !!buscarTrabajador(nombre, personal.map((n) => ({ nombre: n })));
 
   if (!pendientes.length) return <p className="text-xs font-semibold text-green-700">✔ Todas las líneas de horas están importadas.</p>;
 
