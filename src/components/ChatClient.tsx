@@ -4,6 +4,20 @@ import { createClient } from "@/lib/supabase/browser";
 import RevisionDocumento from "./RevisionDocumento";
 
 type Accion = { id: string; resumen: string; tipo?: string; estado: "pendiente" | "confirmada" | "cancelada" | "caducada"; error?: string };
+/** Enlaces de descarga del asistente: [texto](/api/...) → enlace pulsable (solo rutas internas de la propia app). */
+function conEnlaces(t: string) {
+  const partes: React.ReactNode[] = [];
+  const re = /\[([^\]]+)\]\((\/api\/[^)\s]+)\)/g;
+  let i = 0, m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    if (m.index > i) partes.push(t.slice(i, m.index));
+    partes.push(<a key={m.index} href={m[2]} className="font-medium text-brand-700 underline">⬇ {m[1]}</a>);
+    i = m.index + m[0].length;
+  }
+  if (i < t.length) partes.push(t.slice(i));
+  return partes;
+}
+
 type Msg = { id: string; rol: "user" | "assistant"; texto: string; acciones?: Accion[]; enlace?: string; documentos?: string[] };
 type Conv = { id: string; titulo: string | null; updated_at: string };
 
@@ -275,7 +289,7 @@ export default function ChatClient() {
         {msgs.map((m) => (
           <div key={m.id} className={`flex ${m.rol === "user" ? "justify-end" : ""}`}>
             <div className={`${m.documentos?.length ? "w-full" : "max-w-[85%]"} space-y-2 rounded-2xl px-3 py-2 text-sm ${m.rol === "user" ? "bg-brand-600 text-white" : "bg-stone-100"}`}>
-              <p className="whitespace-pre-wrap">{m.texto}</p>
+              <p className="whitespace-pre-wrap">{conEnlaces(m.texto)}</p>
               {m.enlace && <a href={m.enlace} className="btn !px-3 !py-1">Abrir →</a>}
               {m.documentos?.map((d) => <RevisionDocumento key={d} id={d} />)}
               {m.acciones?.map((a) => (

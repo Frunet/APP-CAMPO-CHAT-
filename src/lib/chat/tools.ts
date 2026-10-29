@@ -7,6 +7,7 @@ import { herramientasMaestros, proponerMaestro } from "./maestros";
 import { buscarDiario, herramientasDiario, proponerNovedad, proponerRetirarNovedad } from "./diario";
 import { herramientasMemoria, proponerMemoria, proponerOlvidarMemoria } from "./memoria";
 import { consultarCostesGenerales, herramientasCostes } from "./costes";
+import { herramientasDescargas, prepararDescarga } from "./descargas";
 import { buscarTareas, herramientasTareas, proponerAsignacionTarea, proponerCompletarTarea } from "./tareas";
 import { buscarDocumentos, documentosPendientes, herramientasDocumentos, proponerDocumentoEsperado, proponerRecepcionDocumento, revisarDocumento } from "./documentos";
 import { buscarRegistros, herramientasCorreccion, proponerAnulacion, proponerCorreccion } from "./correcciones";
@@ -146,7 +147,7 @@ export const tools: Anthropic.Tool[] = [
 
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fecha debe ser YYYY-MM-DD");
 
-tools.push(...herramientasCorreccion, ...herramientasDocumentos, ...herramientasTareas, ...herramientasCostes, ...herramientasMemoria, ...herramientasDiario, ...herramientasMaestros);
+tools.push(...herramientasCorreccion, ...herramientasDocumentos, ...herramientasTareas, ...herramientasCostes, ...herramientasDescargas, ...herramientasMemoria, ...herramientasDiario, ...herramientasMaestros);
 
 // ---------- Ejecución ----------
 export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): Promise<unknown> {
@@ -270,6 +271,8 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         return await proponerMemoria(input, ctx);
       case "proponer_olvidar_memoria":
         return await proponerOlvidarMemoria(input, ctx);
+      case "preparar_descarga":
+        return await prepararDescarga(db, ctx, input);
       case "consultar_costes_generales":
         return await consultarCostesGenerales(input, ctx);
       case "buscar_tareas":

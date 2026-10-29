@@ -69,7 +69,6 @@ export default async function Inicio() {
           <h2 className="mb-2 font-medium">Registros incompletos (este mes)</h2>
           <p className="text-sm">• {partesSinTarifa.count ?? 0} parte(s) sin tarifa</p>
           <p className="text-sm">• {cosechasSinCampana.count ?? 0} cosecha(s) sin campaña</p>
-          <Link href="/informes" className="mt-2 inline-block text-sm text-brand-700">Ver informes →</Link>
         </section>
       </div>
 

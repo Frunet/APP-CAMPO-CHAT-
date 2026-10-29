@@ -7,18 +7,12 @@ import { createClient } from "@/lib/supabase/browser";
 const todos: { href: string; label: string; icon: string; soloAdmin?: boolean; soloGestion?: boolean }[] = [
   { href: "/", label: "Inicio", icon: "🏠" },
   { href: "/chat", label: "Chat inteligente", icon: "💬" },
-  { href: "/fincas", label: "Fincas y parcelas", icon: "🌳" },
-  { href: "/trabajo", label: "Trabajo y horas", icon: "👷" },
   { href: "/nominas", label: "Nóminas", icon: "🧾", soloGestion: true },
-  { href: "/cosechas", label: "Cosechas", icon: "🥭" },
-  { href: "/gastos", label: "Gastos y costes", icon: "💶" },
   { href: "/resultados", label: "Cuenta de Resultados", icon: "📈" },
   { href: "/calendario", label: "Calendario", icon: "📅" },
-  { href: "/diario", label: "Diario de fincas", icon: "📝" },
-  { href: "/informes", label: "Informes", icon: "📊" },
   { href: "/maestros", label: "Maestros", icon: "🗂️", soloAdmin: true },
 ];
-const movil = ["/", "/chat", "/trabajo", "/cosechas"];
+const movil = ["/", "/chat", "/calendario", "/resultados"];
 
 
 export default function Nav({ nombre, rol }: { nombre: string; rol: string }) {
