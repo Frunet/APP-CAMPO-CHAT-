@@ -95,23 +95,25 @@ export default function ChatClient() {
   async function abrir(id: string, silencioso = false): Promise<Msg[] | null> {
     const [{ data: c }, { data: m }, { data: acc }] = await Promise.all([
       db.from("chat_conversaciones").select("id").eq("id", id).maybeSingle(),
-      db.from("chat_mensajes").select("id,rol,texto").eq("conversacion_id", id).not("texto", "is", null).order("created_at"),
-      db.from("acciones_pendientes").select("id,resumen,tipo,estado").eq("conversacion_id", id).order("created_at"),
+      db.from("chat_mensajes").select("id,rol,texto,created_at").eq("conversacion_id", id).not("texto", "is", null).order("created_at"),
+      db.from("acciones_pendientes").select("id,resumen,tipo,estado,created_at").eq("conversacion_id", id).order("created_at"),
     ]);
     if (!c) return null; // no existe o no es de este usuario
     if (!silencioso) { setConvId(id); setHistorial(false); }
-    const pend = (acc ?? []) as Accion[];
-    const lista = ((m ?? []) as Msg[]).map((x) => ({ ...x }));
+    const pend = (acc ?? []) as (Accion & { created_at: string })[];
+    const lista = ((m ?? []) as (Msg & { created_at: string })[]).map((x) => ({ ...x }));
     // las tarjetas de revisión de documentos se recomponen a partir del id que queda en el mensaje del documento adjunto
     lista.forEach((x, k) => {
       const id_ = x.rol === "user" ? /\(id ([0-9a-f-]{36})\)/i.exec(x.texto ?? "")?.[1] : undefined;
       if (id_ && lista[k + 1]?.rol === "assistant") lista[k + 1].documentos = [id_];
     });
-    const completa = [
-      ...lista,
-      ...(pend.length ? [{ id: "acc", rol: "assistant" as const, texto: "Acciones de esta conversación:", acciones: pend }] : []),
-    ];
-    setMsgs(completa);
+    // cada tarjeta vuelve a quedar bajo la respuesta del asistente en la que se propuso (la primera respuesta posterior a su creación)
+    const huerfanas: Accion[] = [];
+    for (const a of pend) {
+      const destino = lista.find((x) => x.rol === "assistant" && x.created_at > a.created_at) ?? [...lista].reverse().find((x) => x.rol === "assistant");
+      if (destino) destino.acciones = [...(destino.acciones ?? []), a]; else huerfanas.push(a);
+    }
+    setMsgs(huerfanas.length ? [...lista, { id: "acc", rol: "assistant" as const, texto: "", acciones: huerfanas }] : lista);
     return lista;
   }
   function nueva() { setConvId(undefined); setMsgs([]); setHistorial(false); guardarLS(claveConv(), null); }

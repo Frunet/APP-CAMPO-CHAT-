@@ -16,7 +16,7 @@ export const herramientasDescargas: Anthropic.Tool[] = [
     description:
       "Devuelve el enlace para descargar en Excel o PDF un listado completo: trabajo (partes y horas), cosechas, gastos, diario (diario de fincas), " +
       "informe (informe de producción y rendimiento), resultados (cuenta de resultados; responsables/administradores) o nominas (horas y coste por trabajador; responsables/administradores). " +
-      "Úsalo cuando pidan el detalle, un listado, un Excel o un PDF. Para preguntas de cifras usa las herramientas de consulta. " +
+      "Úsalo SOLO cuando la persona pida expresamente un archivo (Excel, PDF, «descargar», «pásame el fichero»). Nunca lo uses para responder una pregunta: eso se contesta en el chat con las herramientas de consulta. " +
       "Da el enlace en formato [texto](url) tal cual lo devuelve, sin cambiarlo.",
     input_schema: {
       type: "object",
