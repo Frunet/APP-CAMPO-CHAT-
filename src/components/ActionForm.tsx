@@ -4,15 +4,17 @@ import type { Res } from "@/lib/actions";
 
 /** Formulario con estado de envío, mensajes de error/éxito y reinicio opcional tras guardar. */
 export default function ActionForm({
-  action, label, reset = true, className = "grid gap-3 sm:grid-cols-2", danger = false, confirmar, children,
+  action, label, reset = true, className = "grid gap-3 sm:grid-cols-2", danger = false, confirmar, alTerminar, children,
 }: {
   action: (fd: FormData) => Promise<Res>;
-  label: string; reset?: boolean; className?: string; danger?: boolean; confirmar?: string;
+  label: string; reset?: boolean; className?: string; danger?: boolean; confirmar?: string; alTerminar?: () => void;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLFormElement>(null);
   const [state, fa, pending] = useActionState(async (_: Res, fd: FormData) => action(fd), null);
+  const fin = useRef(alTerminar); fin.current = alTerminar;
   useEffect(() => { if (state?.ok && reset) ref.current?.reset(); }, [state, reset]);
+  useEffect(() => { if (state?.ok) fin.current?.(); }, [state]);
 
   return (
     <form

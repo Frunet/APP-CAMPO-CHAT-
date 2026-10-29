@@ -649,6 +649,73 @@ export async function importarRegistros(fd: FormData): Promise<Res> {
   });
 }
 
+/**
+ * Hoja de horas leída de un Excel: crea un parte por cada línea (un trabajador, un día). El usuario solo decide a qué finca va cada nombre de finca
+ * de la hoja; las filas se leen del documento guardado (no se aceptan del navegador). Los trabajadores se enlazan por nombre con Maestros → Personal;
+ * los que no están dados de alta quedan con su nombre y sin tarifa. Lo ya importado no se repite.
+ */
+export async function importarHoras(fd: FormData): Promise<Res> {
+  return run(["/chat", "/resultados", "/nominas", "/"], async ({ db }) => {
+    const documento_id = z.string().uuid().parse(s(fd, "documento_id"));
+    const mapa = z.record(z.string().uuid().nullable()).parse(JSON.parse(s(fd, "mapa") ?? "{}"));
+    const { data: doc } = await db.from("documentos").select("datos_extraidos").eq("id", documento_id).single();
+    if (!doc?.datos_extraidos?.hoja_horas) throw { message: "Este documento no es una hoja de horas." };
+    const regs: any[] = doc.datos_extraidos.registros ?? [];
+    const ya = new Set<number>(doc.datos_extraidos.importados ?? []);
+    const nm = (x: unknown) => String(x ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const sinParentesis = (x: unknown) => nm(String(x ?? "").replace(/\(.*?\)/g, " "));
+
+    const { data: trab } = await db.from("trabajadores").select("id,nombre,finca_id").eq("activo", true);
+    const lista = (trab ?? []) as { id: string; nombre: string; finca_id: string | null }[];
+    const buscar = (nombre: string, finca: string) => {
+      const ok = lista.filter((t) => !t.finca_id || t.finca_id === finca);
+      for (const f of [nm, sinParentesis]) {
+        const m = ok.filter((t) => f(t.nombre) === f(nombre));
+        if (m.length === 1) return m[0].id;
+      }
+      return null;
+    };
+
+    const hechos: number[] = [], saltadas: string[] = [], duplicadas: number[] = [], fallos: string[] = [];
+    const sinFinca = new Set<string>();
+    for (let i = 0; i < regs.length; i++) {
+      if (ya.has(i)) continue;
+      const r = regs[i];
+      const ref = String(r.finca_ref ?? "");
+      const finca = mapa[ref];
+      if (!finca) { sinFinca.add(ref || "(sin finca)"); continue; }
+      if (!r.fecha || !r.trabajador_nombre || !(Number(r.horas) > 0)) { saltadas.push(`${r.hoja} fila ${r.fila}`); continue; }
+      const tid = buscar(String(r.trabajador_nombre), finca);
+      const { error } = await db.from("partes_trabajo").insert({
+        fecha: r.fecha, finca_id: finca, trabajador_id: tid, trabajador_nombre: tid ? null : String(r.trabajador_nombre).slice(0, 120), num_trabajadores: 1,
+        horas_por_trabajador: Number(r.horas), horas_extra_por_trabajador: Math.min(Number(r.horas_extra) || 0, Number(r.horas)),
+        tipo_trabajo: r.tipo_trabajo ?? null, actividad: r.actividad ? String(r.actividad).slice(0, 500) : null, origen: "documento",
+      });
+      if (!error) hechos.push(i);
+      else if (error.code === "23505") { duplicadas.push(i); }
+      else if (fallos.length < 3) fallos.push(`${r.hoja} fila ${r.fila}: ${msgError(error)}`);
+      else fallos.push("");
+    }
+
+    const nuevos = [...hechos, ...duplicadas];
+    if (nuevos.length) {
+      const importados = [...ya, ...nuevos];
+      await db.from("documentos").update({
+        datos_extraidos: { ...doc.datos_extraidos, importados },
+        estado: importados.length >= regs.length ? "importado" : "revisado",
+      }).eq("id", documento_id);
+    }
+    if (!hechos.length && !duplicadas.length)
+      throw { message: fallos.filter(Boolean).join(" | ") || (sinFinca.size ? `Elige la finca de: ${[...sinFinca].join(", ")}.` : "No había nada que importar.") };
+    const partes = [`${hechos.length} línea(s) de horas importada(s)`];
+    if (duplicadas.length) partes.push(`${duplicadas.length} ya existían`);
+    if (saltadas.length) partes.push(`${saltadas.length} con datos incompletos (${saltadas.slice(0, 3).join(", ")}${saltadas.length > 3 ? "…" : ""})`);
+    if (sinFinca.size) partes.push(`pendientes de elegir finca: ${[...sinFinca].join(", ")}`);
+    if (fallos.some(Boolean)) partes.push(`con errores: ${fallos.filter(Boolean).join(" | ")}`);
+    return partes.join(". ") + ".";
+  });
+}
+
 /** El usuario indica qué columna es cada dato de un Excel/CSV de facturas; se relee el original (sin IA). */
 export async function aplicarMapeoDocumento(fd: FormData): Promise<Res> {
   return run(["/chat"], async ({ db }) => {
