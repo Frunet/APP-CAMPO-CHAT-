@@ -43,7 +43,7 @@ export const tools: Anthropic.Tool[] = [
   },
   {
     name: "consultar_mano_obra",
-    description: "Devuelve horas totales, nº de partes y coste de mano de obra reales en el periodo, por parcela y día.",
+    description: "Devuelve horas totales, horas extra, nº de partes y coste de mano de obra reales en el periodo, por finca, trabajador, parcela y día. Para «horas por trabajador» usa por_trabajador.",
     input_schema: { type: "object", properties: rango, required: ["desde", "hasta"] },
   },
   {
@@ -197,7 +197,7 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
         const p = z.object({ desde: fecha, hasta: fecha }).parse(input);
         const ref = await resolver(db, input.finca, input.parcela);
         if (esError(ref)) return ref;
-        let q = db.from("partes_trabajo").select("fecha,horas_totales,coste_total,num_trabajadores,parcelas(codigo)").gte("fecha", p.desde).lte("fecha", p.hasta).limit(ROW_CAP);
+        let q = db.from("partes_trabajo").select("fecha,horas_totales,horas_extra_totales,coste_total,num_trabajadores,trabajador_nombre,parcelas(codigo),fincas(nombre),trabajadores(nombre),equipos(nombre)").gte("fecha", p.desde).lte("fecha", p.hasta).limit(ROW_CAP);
         if (ref.finca_id) q = q.eq("finca_id", ref.finca_id);
         if (ref.parcela_id) q = q.eq("parcela_id", ref.parcela_id);
         const { data, error } = await q;
@@ -213,6 +213,9 @@ export async function ejecutarHerramienta(name: string, input: any, ctx: Ctx): P
           periodo: `${p.desde} a ${p.hasta}`, partes: rows.length, horas_totales: round(sum(rows.map((r) => r.horas_totales))),
           coste_total_eur: round(sum(rows.map((r) => r.coste_total))),
           aviso_coste: sinTarifa ? `${sinTarifa} parte(s) sin tarifa: el coste es parcial.` : null,
+          horas_extra: round(sum(rows.map((r) => r.horas_extra_totales))),
+          por_finca: por((r) => r.fincas?.nombre ?? "sin finca"),
+          por_trabajador: por((r) => r.trabajadores?.nombre ?? r.trabajador_nombre ?? (r.equipos?.nombre ? `Equipo ${r.equipos.nombre}` : "sin nombre")),
           por_parcela: por((r) => r.parcelas?.codigo ?? "sin parcela"), por_dia: por((r) => r.fecha),
         };
       }

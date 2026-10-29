@@ -1,23 +1,10 @@
 "use client";
+import Markdown from "./Markdown";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import RevisionDocumento from "./RevisionDocumento";
 
 type Accion = { id: string; resumen: string; tipo?: string; estado: "pendiente" | "confirmada" | "cancelada" | "caducada"; error?: string };
-/** Enlaces de descarga del asistente: [texto](/api/...) → enlace pulsable (solo rutas internas de la propia app). */
-function conEnlaces(t: string) {
-  const partes: React.ReactNode[] = [];
-  const re = /\[([^\]]+)\]\((\/api\/[^)\s]+)\)/g;
-  let i = 0, m: RegExpExecArray | null;
-  while ((m = re.exec(t))) {
-    if (m.index > i) partes.push(t.slice(i, m.index));
-    partes.push(<a key={m.index} href={m[2]} className="font-medium text-brand-700 underline">⬇ {m[1]}</a>);
-    i = m.index + m[0].length;
-  }
-  if (i < t.length) partes.push(t.slice(i));
-  return partes;
-}
-
 type Msg = { id: string; rol: "user" | "assistant"; texto: string; acciones?: Accion[]; enlace?: string; documentos?: string[] };
 type Conv = { id: string; titulo: string | null; updated_at: string };
 
@@ -29,6 +16,11 @@ export default function ChatClient() {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [estado, setEstado] = useState("");
+  const [arrastrando, setArrastrando] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [copiado, setCopiado] = useState("");
+  useEffect(() => { const el = taRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 200) + "px"; } }, [texto]);
   const [historial, setHistorial] = useState(false);
   const [escuchando, setEscuchando] = useState(false);
   const fin = useRef<HTMLDivElement>(null);
@@ -141,7 +133,8 @@ export default function ChatClient() {
     setTexto(""); setEnviando(true); refs.current.enviando = true;
     setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "user", texto: t }]);
     try {
-      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversacionId: refs.current.convId }) });
+      const ac = new AbortController(); abortRef.current = ac;
+      const r = await fetch("/api/chat", { method: "POST", signal: ac.signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversacionId: refs.current.convId }) });
       if (!r.ok || !r.body) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? "Error");
       // Respuesta en directo: el texto aparece según se escribe
       const idIA = crypto.randomUUID();
@@ -181,9 +174,10 @@ export default function ChatClient() {
         hablar(j.texto + aviso, () => { if (refs.current.manos) refs.current.dictar(); });
       }
     } catch (err) {
+      if ((err as Error).name === "AbortError") { guardarLS(clavePend(), null); return; } // la persona paró la respuesta: se queda lo ya escrito
       setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: `⚠️ ${(err as Error).message}` }]);
       setManos(false);
-    } finally { setEnviando(false); setEstado(""); refs.current.enviando = false; }
+    } finally { abortRef.current = null; setEnviando(false); setEstado(""); refs.current.enviando = false; }
   }
   refs.current.enviar = enviarTexto;
   const enviar = (e?: React.FormEvent) => { e?.preventDefault(); enviarTexto(texto); };
@@ -256,7 +250,10 @@ export default function ChatClient() {
   const sugerencias = ["¿Cómo vamos esta semana?", "¿Cuántos kilos hemos recolectado este mes?", "¿Qué falta por registrar?"];
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-7rem)] max-w-3xl flex-col md:h-[calc(100vh-3rem)]">
+    <div className="mx-auto flex h-[calc(100vh-7rem)] max-w-3xl flex-col md:h-[calc(100vh-3rem)]"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setArrastrando(true); } }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target) setArrastrando(false); }}
+      onDrop={(e) => { e.preventDefault(); setArrastrando(false); const fs = [...e.dataTransfer.files]; if (fs.length) void (async () => { for (const f of fs) await adjuntar(f); })(); }}>
       <div className="mb-2 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Chat inteligente</h1>
         <div className="flex gap-2">
@@ -277,19 +274,25 @@ export default function ChatClient() {
         </div>
       )}
 
-      <div className="flex-1 space-y-3 overflow-y-auto rounded-xl border border-stone-200 bg-white p-3">
+      <div className={`relative flex-1 space-y-5 overflow-y-auto rounded-xl border bg-white p-3 sm:p-5 ${arrastrando ? "border-brand-600 ring-2 ring-brand-600/30" : "border-stone-200"}`}>
+        {arrastrando && <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/80 text-sm font-medium text-brand-700">Suelta aquí el Excel, PDF o foto</div>}
         {msgs.length === 0 && (
-          <div className="py-10 text-center text-sm text-stone-500">
-            <p className="mb-3">Escribe o dicta: «Hoy han trabajado 8 personas durante 7 horas en la parcela 3».</p>
+          <div className="py-16 text-center">
+            <p className="mb-1 text-2xl font-semibold text-stone-800">¿En qué te ayudo?</p>
+            <p className="mb-5 text-sm text-stone-500">Pregunta lo que quieras, cuéntame lo que ha pasado en las fincas o suelta aquí un Excel, PDF o foto.</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {sugerencias.map((s) => <button key={s} className="btn-ghost" onClick={() => setTexto(s)}>{s}</button>)}
+              {sugerencias.map((x) => <button key={x} className="btn-ghost !rounded-full" onClick={() => enviarTexto(x)}>{x}</button>)}
             </div>
           </div>
         )}
         {msgs.map((m) => (
           <div key={m.id} className={`flex ${m.rol === "user" ? "justify-end" : ""}`}>
-            <div className={`${m.documentos?.length ? "w-full" : "max-w-[85%]"} space-y-2 rounded-2xl px-3 py-2 text-sm ${m.rol === "user" ? "bg-brand-600 text-white" : "bg-stone-100"}`}>
-              <p className="whitespace-pre-wrap">{conEnlaces(m.texto)}</p>
+            <div className={`${m.rol === "user" ? "max-w-[85%] rounded-3xl bg-stone-100 px-4 py-2" : "w-full px-1"} group space-y-2 text-[15px] text-stone-900`}>
+              {m.rol === "user" ? <p className="whitespace-pre-wrap">{m.texto}</p> : m.texto ? <Markdown texto={m.texto} /> : null}
+              {m.rol === "assistant" && m.texto && !m.texto.startsWith("⚠️") && (
+                <button type="button" className="text-xs text-stone-400 opacity-0 transition hover:text-stone-700 group-hover:opacity-100 focus:opacity-100"
+                  onClick={() => { void navigator.clipboard?.writeText(m.texto); setCopiado(m.id); setTimeout(() => setCopiado(""), 1500); }}>{copiado === m.id ? "✔ Copiado" : "⧉ Copiar"}</button>
+              )}
               {m.enlace && <a href={m.enlace} className="btn !px-3 !py-1">Abrir →</a>}
               {m.documentos?.map((d) => <RevisionDocumento key={d} id={d} />)}
               {m.acciones?.map((a) => (
@@ -315,7 +318,7 @@ export default function ChatClient() {
             </div>
           </div>
         ))}
-        {(enviando || esperando != null) && <p className="text-sm text-stone-400">{estado || (enviando ? "Pensando…" : "Consultando…")}</p>}
+        {(enviando || esperando != null) && <p className="animate-pulse text-sm text-stone-400">{estado || (enviando ? "Pensando…" : "Consultando…")}</p>}
         <div ref={fin} />
       </div>
 
@@ -324,17 +327,22 @@ export default function ChatClient() {
         <label className="flex items-center gap-1"><input type="checkbox" checked={auto} onChange={(e) => { setAuto(e.target.checked); guarda("chat_auto", e.target.checked); }} /> Enviar al terminar de dictar</label>
         <span className="text-stone-400">Los registros siempre se confirman con el botón.</span>
       </div>
-      <form onSubmit={enviar} className="mt-1 flex items-end gap-2">
+      <form onSubmit={enviar} className="mt-2 flex items-end gap-1 rounded-3xl border border-stone-300 bg-white px-2 py-1.5 shadow-sm focus-within:border-brand-600">
         <input ref={adjunto} type="file" multiple hidden accept=".pdf,.xls,.xlsx,.csv,.docx,.jpg,.jpeg,.png"
           onChange={(e) => { const fs = [...(e.target.files ?? [])]; e.target.value = ""; void (async () => { for (const f of fs) await adjuntar(f); })(); }} />
-        <button type="button" className="btn-ghost" disabled={enviando} title="Adjuntar factura, albarán, parte, foto…" onClick={() => adjunto.current?.click()}>📎</button>
+        <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-stone-600 hover:bg-stone-100" disabled={enviando} title="Adjuntar Excel, PDF, Word o foto (también puedes arrastrarlos o pegarlos)" onClick={() => adjunto.current?.click()}>📎</button>
         <textarea
-          className="input max-h-32 min-h-[2.5rem] flex-1 resize-none" rows={1} placeholder="Escribe un mensaje…" value={texto}
+          ref={taRef} className="max-h-[200px] min-h-[2.25rem] flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] outline-none" rows={1} placeholder="Escribe un mensaje…" value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }}
+          onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); void (async () => { for (const f of fs) await adjuntar(f); })(); } }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); enviar(); } }}
         />
-        <button type="button" onClick={dictar} className={`btn-ghost ${escuchando ? "!border-red-400 !text-red-600" : ""}`} title="Dictar">🎤</button>
-        <button className="btn" disabled={enviando || !texto.trim()}>Enviar</button>
+        <button type="button" onClick={dictar} className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg hover:bg-stone-100 ${escuchando ? "!bg-red-50 text-red-600" : "text-stone-600"}`} title="Dictar">🎤</button>
+        {enviando && abortRef.current ? (
+          <button type="button" onClick={() => abortRef.current?.abort()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-800 text-white" title="Parar">■</button>
+        ) : (
+          <button className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white disabled:opacity-30" disabled={enviando || !texto.trim()} title="Enviar">↑</button>
+        )}
       </form>
     </div>
   );
