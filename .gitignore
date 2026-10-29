@@ -7,3 +7,6 @@ next-env.d.ts
 .claude/
 .env*.bak
 .env*.bak*
+
+.app.log
+.app.err.log
