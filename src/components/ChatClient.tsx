@@ -14,6 +14,7 @@ export default function ChatClient() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [estado, setEstado] = useState("");
   const [historial, setHistorial] = useState(false);
   const [escuchando, setEscuchando] = useState(false);
   const fin = useRef<HTMLDivElement>(null);
@@ -127,10 +128,39 @@ export default function ChatClient() {
     setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "user", texto: t }]);
     try {
       const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: t, conversacionId: refs.current.convId }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Error");
+      if (!r.ok || !r.body) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? "Error");
+      // Respuesta en directo: el texto aparece según se escribe
+      const idIA = crypto.randomUUID();
+      let acum = "", creado = false;
+      const pintar = (extra: Partial<Msg> = {}) => {
+        const nuevo = !creado; creado = true;
+        setMsgs((x) => nuevo ? [...x, { id: idIA, rol: "assistant", texto: acum, ...extra }] : x.map((m) => m.id === idIA ? { ...m, texto: acum, ...extra } : m));
+      };
+      let fin: any = null;
+      const lector = r.body.getReader(), dec = new TextDecoder();
+      let resto = "";
+      const trata = (linea: string) => {
+        if (!linea.trim()) return;
+        let ev: any; try { ev = JSON.parse(linea); } catch { return; }
+        if (ev.t === "texto") { acum += ev.d; setEstado(""); pintar(); }
+        else if (ev.t === "reset") { acum = ""; if (creado) pintar(); }
+        else if (ev.t === "estado") setEstado(ev.d);
+        else if (ev.t === "error") throw new Error(ev.error);
+        else if (ev.t === "fin") fin = ev;
+      };
+      for (;;) {
+        const { done, value } = await lector.read();
+        if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const ls = resto.split("\n"); resto = ls.pop() ?? "";
+        ls.forEach(trata);
+      }
+      if (resto) trata(resto);
+      if (!fin) throw new Error("Se cortó la respuesta. Inténtalo de nuevo.");
+      const j = fin;
       setConvId(j.conversacionId); refs.current.convId = j.conversacionId; guardarLS(clavePend(), null);
-      setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: j.texto, acciones: j.acciones.map((a: any) => ({ ...a, estado: "pendiente" })), documentos: j.documentos ?? [] }]);
+      acum = j.texto ?? acum;
+      pintar({ acciones: j.acciones.map((a: any) => ({ ...a, estado: "pendiente" })), documentos: j.documentos ?? [] });
       cargarConvs();
       if (refs.current.leer || refs.current.manos) {
         const aviso = j.acciones.length ? ` Hay ${j.acciones.length} registro${j.acciones.length > 1 ? "s" : ""} pendiente${j.acciones.length > 1 ? "s" : ""} de confirmar. Confírmalo con el botón de la pantalla.` : "";
@@ -139,7 +169,7 @@ export default function ChatClient() {
     } catch (err) {
       setMsgs((x) => [...x, { id: crypto.randomUUID(), rol: "assistant", texto: `⚠️ ${(err as Error).message}` }]);
       setManos(false);
-    } finally { setEnviando(false); refs.current.enviando = false; }
+    } finally { setEnviando(false); setEstado(""); refs.current.enviando = false; }
   }
   refs.current.enviar = enviarTexto;
   const enviar = (e?: React.FormEvent) => { e?.preventDefault(); enviarTexto(texto); };
@@ -271,7 +301,7 @@ export default function ChatClient() {
             </div>
           </div>
         ))}
-        {(enviando || esperando != null) && <p className="text-sm text-stone-400">Consultando…</p>}
+        {(enviando || esperando != null) && <p className="text-sm text-stone-400">{estado || (enviando ? "Pensando…" : "Consultando…")}</p>}
         <div ref={fin} />
       </div>
 

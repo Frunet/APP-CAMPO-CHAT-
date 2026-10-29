@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { clienteIA } from "@/lib/ia/cliente";
+import { clienteIA, proveedorIA } from "@/lib/ia/cliente";
+import { crearConGemini } from "@/lib/ia/gemini";
 import { ejecutarHerramienta, tools } from "@/lib/chat/tools";
 import { DEMO } from "@/lib/demo/config";
 import { respuestaDemo } from "@/lib/demo/chat";
@@ -13,10 +14,18 @@ const MAX_VUELTAS = 8;
 
 const anthropic = clienteIA(); // Claude por defecto; Gemini si IA_PROVIDER=gemini (pruebas)
 
+/** Llama al modelo avisando del texto según se va escribiendo (respuesta en directo). */
+async function generar(params: any, onText: (d: string) => void): Promise<Anthropic.Message> {
+  if (proveedorIA() === "gemini") return (await crearConGemini(params, onText)) as unknown as Anthropic.Message;
+  const flujo = (anthropic as any).messages.stream(params);
+  flujo.on("text", onText);
+  return flujo.finalMessage();
+}
+
 function systemPrompt(nombre: string, rol: string, memoria = "", resumen = "") {
   const hoy = new Date().toISOString().slice(0, 10);
   const dia = new Date().toLocaleDateString("es-ES", { weekday: "long" });
-  return `Eres el asistente de control de fincas agrícolas. Hablas con ${nombre} (rol: ${rol}). Hoy es ${dia} ${hoy}. Responde en español.
+  return `Eres el asistente de control de fincas agrícolas. Hablas con ${nombre} (rol: ${rol}). Hoy es ${dia} ${hoy}. Responde en español. Además de gestionar la finca, puedes conversar de cualquier tema como lo haría ChatGPT (agronomía, dudas, redactar un texto, explicar algo, ideas…): en esos casos responde con tu conocimiento, de forma completa si hace falta. Las cifras y los datos de las fincas, en cambio, SIEMPRE salen de las herramientas.
 
 CÓMO HABLAR (importante): habla como una persona de confianza que lleva las fincas, no como un programa. Tono cercano y natural, frases normales, tuteo, sin listas ni negritas salvo que la persona pida un listado o una tabla. Ve al grano y responde primero a lo que te preguntan o piden.
 - No repitas lo que ya se hizo ni lo que ya se dijo antes en la conversación. No hagas recuentos de acciones («he registrado…, he propuesto…, queda pendiente…»), no resumas al final y no recuerdes en cada mensaje qué está pendiente de confirmar: la persona ya ve las tarjetas con sus botones.
@@ -88,7 +97,20 @@ export async function POST(req: Request) {
   const { count: pendientes } = await db.from("acciones_pendientes").select("id", { count: "exact", head: true }).eq("conversacion_id", convId).eq("estado", "pendiente");
   let modelo = elegirModelo(message, { hayPendientes: (pendientes ?? 0) > 0, ultimaRespuestaEsPregunta: /[?¿]\s*$/.test(ultimaIA) });
 
-  const mensajes: Anthropic.MessageParam[] = [...historial, { role: "user", content: message }];
+  const enc = new TextEncoder();
+  const flujo = new ReadableStream({
+    async start(ctrl) {
+      let abierto = true;
+      // Si la persona sale de la pantalla, el trabajo sigue y se guarda igualmente
+      const emitir = (o: unknown) => { if (abierto) { try { ctrl.enqueue(enc.encode(JSON.stringify(o) + "\n")); } catch { abierto = false; } } };
+      try { await responder(emitir); } catch (e) { console.error("chat error", e); emitir({ t: "error", error: "No he podido contactar con el asistente. Inténtalo de nuevo." }); }
+      try { ctrl.close(); } catch { /* ya cerrado */ }
+    },
+  });
+  return new Response(flujo, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+
+  async function responder(emitir: (o: unknown) => void) {
+  const mensajes: Anthropic.MessageParam[] = [...historial, { role: "user", content: message! }];
   const guardar: { rol: string; contenido: unknown; texto?: string }[] = [{ rol: "user", contenido: message, texto: message }];
   const acciones: { id: string; resumen: string; tipo?: string }[] = [];
   const documentos = new Set<string>(); // tarjetas de revisión que el chat debe mostrar
@@ -96,26 +118,29 @@ export async function POST(req: Request) {
 
   try {
     for (let v = 0; v < MAX_VUELTAS; v++) {
-      const res = await anthropic.messages.create({
+      const res = await generar({
         model: modelo, max_tokens: 8000, output_config: { effort: modelo === MODELO_SIMPLE ? "low" : "medium" },
-        system: systemPrompt(perfil.nombre, perfil.rol, memoria, resumen), tools, messages: mensajes,
-      });
+        system: systemPrompt(perfil!.nombre, perfil!.rol, memoria, resumen), tools, messages: mensajes,
+      }, (d) => emitir({ t: "texto", d }));
       // Red de seguridad: el modelo barato nunca prepara registros. Si lo intenta, se descarta y se repite con el potente.
       if (modelo === MODELO_SIMPLE && res.content.some((b) => b.type === "tool_use" && b.name.startsWith("proponer_"))) {
         modelo = MODELO_COMPLEJO;
+        emitir({ t: "reset" });
         continue;
       }
       mensajes.push({ role: "assistant", content: res.content });
       const t = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("\n");
       guardar.push({ rol: "assistant", contenido: res.content, texto: t || undefined });
       if (t) texto = t;
+      if (res.stop_reason === "tool_use" && t) emitir({ t: "texto", d: "\n\n" }); // separa lo dicho antes de consultar
 
       if (res.stop_reason !== "tool_use") break;
 
       const resultados: Anthropic.ToolResultBlockParam[] = [];
       for (const b of res.content) {
         if (b.type !== "tool_use") continue;
-        const r = await ejecutarHerramienta(b.name, b.input, { db, userId: auth.user.id, conversacionId: convId! });
+        emitir({ t: "estado", d: b.name.startsWith("proponer_") ? "Preparando el registro…" : "Consultando los datos…" });
+        const r = await ejecutarHerramienta(b.name, b.input, { db, userId: auth.user!.id, conversacionId: convId! });
         const obj = r as { accion_id?: string; resumen?: string; tipo?: string };
         if (obj?.accion_id) acciones.push({ id: obj.accion_id, resumen: obj.resumen!, tipo: obj.tipo });
         const mostrar = (r as { mostrar_documento?: string })?.mostrar_documento;
@@ -128,7 +153,8 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("chat error", e);
     const limite = (e as { status?: number })?.status === 429;
-    return NextResponse.json({ error: limite ? "El servicio de IA ha alcanzado su límite de uso (normal en la clave gratuita). Espera un minuto e inténtalo de nuevo." : "No he podido contactar con el asistente. Inténtalo de nuevo." }, { status: limite ? 429 : 502 });
+    emitir({ t: "error", error: limite ? "El servicio de IA ha alcanzado su límite de uso (normal en la clave gratuita). Espera un minuto e inténtalo de nuevo." : "No he podido contactar con el asistente. Inténtalo de nuevo." });
+    return;
   }
 
   // Un solo insert con created_at escalonado para conservar el orden
@@ -140,7 +166,7 @@ export async function POST(req: Request) {
     })),
   );
   await db.from("chat_conversaciones").update({ updated_at: new Date().toISOString() }).eq("id", convId);
+  emitir({ t: "fin", conversacionId: convId, texto, acciones, documentos: [...documentos], modelo });
   await resumirSiHaceFalta(db, anthropic, convId!); // conversaciones largas: resumen automático (nunca falla el chat)
-
-  return NextResponse.json({ conversacionId: convId, texto, acciones, documentos: [...documentos], modelo });
+  }
 }

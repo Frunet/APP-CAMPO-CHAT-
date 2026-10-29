@@ -91,8 +91,54 @@ async function llamar(url: string, cuerpo: unknown, intentos = 3): Promise<any> 
   throw ultimo;
 }
 
+/** Igual que `llamar` pero leyendo la respuesta por trozos (SSE): avisa del texto según llega y devuelve el mismo objeto que generateContent. */
+async function llamarStream(url: string, cuerpo: unknown, onText: (d: string) => void): Promise<any> {
+  let r!: Response, ultimo: any;
+  for (let i = 0; i < 3; i++) {
+    r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY ?? "" }, body: JSON.stringify(cuerpo) });
+    if (r.ok) { ultimo = null; break; }
+    const txt = await r.text();
+    ultimo = Object.assign(new Error(`Gemini ${r.status}: ${txt.slice(0, 300)}`), { status: r.status, diario: r.status === 429 && /PerDay/.test(txt) });
+    if (r.status === 429 && /PerDay/.test(txt)) break;
+    if (r.status === 429 || r.status === 503) { await new Promise((ok) => setTimeout(ok, 2500 * (i + 1))); continue; }
+    break;
+  }
+  if (ultimo) throw ultimo;
+  const parts: any[] = [];
+  let finishReason: string | undefined, usageMetadata: any, promptFeedback: any;
+  const dec = new TextDecoder();
+  let resto = "";
+  const trata = (linea: string) => {
+    if (!linea.startsWith("data:")) return;
+    let c: any; try { c = JSON.parse(linea.slice(5).trim()); } catch { return; }
+    if (c.promptFeedback) promptFeedback = c.promptFeedback;
+    if (c.usageMetadata) usageMetadata = c.usageMetadata;
+    const cand = c.candidates?.[0];
+    if (cand?.finishReason) finishReason = cand.finishReason;
+    for (const part of cand?.content?.parts ?? []) {
+      parts.push(part);
+      if (!part.thought && typeof part.text === "string" && part.text) onText(part.text);
+    }
+  };
+  for await (const trozo of r.body as unknown as AsyncIterable<Uint8Array>) {
+    resto += dec.decode(trozo, { stream: true });
+    const lineas = resto.split(/\r?\n/); resto = lineas.pop() ?? "";
+    lineas.forEach(trata);
+  }
+  if (resto) trata(resto);
+  // Trozos de texto contiguos → un solo bloque (si no, se unirían con saltos de línea)
+  const unidas: any[] = [];
+  for (const p of parts) {
+    const ant = unidas[unidas.length - 1];
+    if (ant && typeof p.text === "string" && typeof ant.text === "string" && !p.thought && !ant.thought && !p.functionCall) {
+      ant.text += p.text; if (p.thoughtSignature) ant.thoughtSignature = p.thoughtSignature;
+    } else unidas.push({ ...p });
+  }
+  return { candidates: [{ content: { parts: unidas }, finishReason }], usageMetadata, promptFeedback };
+}
+
 let contador = 0;
-export async function crearConGemini(p: { model: string; system?: string; messages: Mensaje[]; tools?: Herramienta[]; max_tokens?: number }) {
+export async function crearConGemini(p: { model: string; system?: string; messages: Mensaje[]; tools?: Herramienta[]; max_tokens?: number }, onText?: (d: string) => void) {
   if (!process.env.GEMINI_API_KEY) throw new Error("Falta GEMINI_API_KEY");
   const modelo = modeloGemini(p.model);
   const cuerpo: any = {
@@ -104,13 +150,14 @@ export async function crearConGemini(p: { model: string; system?: string; messag
     cuerpo.tools = [{ functionDeclarations: p.tools.map((t) => ({ name: t.name, description: t.description ?? "", parameters: limpiarSchema(t.input_schema ?? { type: "object", properties: {} }) })) }];
     cuerpo.toolConfig = { functionCallingConfig: { mode: "AUTO" } };
   }
-  const url = (m: string) => `${BASE}/models/${encodeURIComponent(m)}:generateContent`;
+  const url = (m: string) => `${BASE}/models/${encodeURIComponent(m)}:${onText ? "streamGenerateContent?alt=sse" : "generateContent"}`;
+  const pedir = (m: string) => (onText ? llamarStream(url(m), cuerpo, onText) : llamar(url(m), cuerpo));
   let j: any;
-  try { j = await llamar(url(modelo), cuerpo); }
+  try { j = await pedir(modelo); }
   catch (e: any) {
     // Agotado el cupo diario del modelo potente: seguir con el ligero en vez de dejar el chat parado
     const ligero = process.env.GEMINI_MODEL_SIMPLE;
-    if (e?.diario && ligero && ligero !== modelo) j = await llamar(url(ligero), cuerpo);
+    if (e?.diario && ligero && ligero !== modelo) j = await pedir(ligero);
     else throw e;
   }
   const cand = j.candidates?.[0];
