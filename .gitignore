@@ -14,3 +14,7 @@ next-env.d.ts
 .env.vercel
 web/node_modules
 web/dist
+
+# Ficheros con contraseñas: nunca al repositorio
+CONTRASE*AS*.xlsx
+*.xlsx
