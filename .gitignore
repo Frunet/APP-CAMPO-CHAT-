@@ -12,3 +12,5 @@ next-env.d.ts
 .app.err.log
 .env.nube
 .env.vercel
+web/node_modules
+web/dist
