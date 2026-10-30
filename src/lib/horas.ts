@@ -15,3 +15,11 @@ export const TAREAS: readonly TareaDef[] = [
 ];
 export const TAREAS_HORAS = TAREAS.map((t) => t.nombre);
 export const MAX_HORAS_DIA = 12;
+
+/** Un campo de horas por tarea (y por subtipo, si lo tiene): «Hierba · Tractor», «Riego», «Cosecha»… En este orden se numeran h0, h1… en el formulario. */
+export type CampoHoras = { tarea: string; subtipo: string | null; etiqueta: string; cosecha: boolean };
+export const CAMPOS_HORAS: readonly CampoHoras[] = TAREAS.flatMap((t): CampoHoras[] =>
+  t.subtipos
+    ? t.subtipos.map((s) => ({ tarea: t.nombre, subtipo: s, etiqueta: `${t.nombre} · ${s}`, cosecha: false }))
+    : [{ tarea: t.nombre, subtipo: null, etiqueta: t.nombre, cosecha: !!t.cosecha }],
+);

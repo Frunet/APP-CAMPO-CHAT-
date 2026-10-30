@@ -18,7 +18,7 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
   ]);
 
   let q = ctx.db.from("partes_trabajo")
-    .select("id,fecha,horas_por_trabajador,num_trabajadores,horas_totales,coste_total,tipo_trabajo,actividad,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
+    .select("id,fecha,horas_por_trabajador,num_trabajadores,horas_totales,horas_extra_totales,coste_total,tipo_trabajo,actividad,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
     .order("fecha", { ascending: false }).limit(2000);
   if (f.desde) q = q.gte("fecha", f.desde);
   if (f.hasta) q = q.lte("fecha", f.hasta);
@@ -61,16 +61,16 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead><tr>{["Fecha", "Código", "Trabajador", "Finca", "Tarea", "Horas", ...(verCoste ? ["Coste"] : [])].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+          <thead><tr>{["Fecha", "Código", "Trabajador", "Finca", "Tarea", "Horas", "Extra", ...(verCoste ? ["Coste"] : [])].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-stone-100">
             {filas.slice(0, MOSTRAR).map((r) => (
               <tr key={r.id}>
                 <td className="td">{fecha(r.fecha)}</td><td className="td">{r.trabajadores?.codigo ?? "—"}</td><td className="td">{r.trabajadores?.nombre ?? r.trabajador_nombre ?? "—"}</td>
-                <td className="td">{r.fincas?.nombre}</td><td className="td">{r.tipo_trabajo ?? "—"}{r.actividad && <span className="text-xs text-stone-500"> · {r.actividad}</span>}</td><td className="td">{num(r.horas_totales, 2)}</td>
+                <td className="td">{r.fincas?.nombre}</td><td className="td">{r.tipo_trabajo ?? "—"}{r.actividad && <span className="text-xs text-stone-500"> · {r.actividad}</span>}</td><td className="td">{num(r.horas_totales, 2)}</td><td className="td">{Number(r.horas_extra_totales) > 0 ? num(r.horas_extra_totales, 2) : "—"}</td>
                 {verCoste && <td className="td">{r.coste_total == null ? <span className="text-xs text-amber-600">sin tarifa</span> : eur(r.coste_total)}</td>}
               </tr>
             ))}
-            {!filas.length && <tr><td className="td text-stone-500" colSpan={7}>Sin registros para este filtro.</td></tr>}
+            {!filas.length && <tr><td className="td text-stone-500" colSpan={8}>Sin registros para este filtro.</td></tr>}
           </tbody>
         </table>
       </div>

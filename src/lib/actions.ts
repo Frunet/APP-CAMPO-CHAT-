@@ -1,5 +1,5 @@
 "use server";
-import { MAX_HORAS_DIA, TAREAS } from "@/lib/horas";
+import { CAMPOS_HORAS, MAX_HORAS_DIA } from "@/lib/horas";
 import { numero } from "@/lib/documentos/produccion";
 import { buscarTrabajador } from "@/lib/documentos/nombres";
 import { revalidatePath } from "next/cache";
@@ -732,29 +732,30 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
     const error = (m: string) => new z.ZodError([{ code: "custom", path: [], message: m }]);
     const obs = s(fd, "actividad")?.slice(0, 400) ?? null;
     const { data: vars } = await db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true);
-    const lineas: { tarea: string; h: number; actividad: string | null; kg?: number; cultivo?: string; variedad?: string | null }[] = [];
-    for (let i = 0; i < 30; i++) {
-      const nombre = s(fd, `l${i}_tarea`);
-      if (!nombre) continue;
-      const def = TAREAS.find((t) => t.nombre === nombre);
-      if (!def) throw error(`Tarea no válida: «${nombre}»`);
-      const h = n(fd, `l${i}_horas`);
-      if (h == null || Number.isNaN(h) || h <= 0 || h > 24) throw error(`Indica las horas de «${nombre}» (entre 0 y 24)`);
-      const sub = s(fd, `l${i}_subtipo`);
-      if (def.subtipos && (!sub || !def.subtipos.includes(sub))) throw error(`«${nombre}» necesita un subtipo (${def.subtipos.join(" o ")})`);
-      const l: (typeof lineas)[number] = { tarea: nombre, h, actividad: [def.subtipos ? sub : null, obs].filter(Boolean).join(" · ") || null };
-      if (def.cosecha) {
-        const kg = numero(s(fd, `l${i}_kg`)); // admite 1.250 (mil doscientos cincuenta) y 1250,5
-        if (kg == null || kg <= 0 || kg > 10_000_000) throw error("Indica los kg cosechados en la tarea Cosecha");
-        const v = ((vars ?? []) as any[]).find((x) => x.id === s(fd, `l${i}_variedad`));
+    const lineas: { tarea: string; h: number; extra: number; actividad: string | null; kg?: number; cultivo?: string; variedad?: string | null }[] = [];
+    CAMPOS_HORAS.forEach((c, i) => {
+      const h = n(fd, `h${i}`);
+      if (h == null || h === 0) return;
+      if (Number.isNaN(h) || h < 0 || h > 24) throw error(`Horas no válidas en «${c.etiqueta}»`);
+      const l: (typeof lineas)[number] = { tarea: c.tarea, h, extra: 0, actividad: [c.subtipo, obs].filter(Boolean).join(" · ") || null };
+      if (c.cosecha) {
+        const kg = numero(s(fd, `kg${i}`)); // admite 1.250 (mil doscientos cincuenta) y 1250,5
+        if (kg == null || kg <= 0 || kg > 10_000_000) throw error("Indica los kg cosechados en Cosecha");
+        const v = ((vars ?? []) as any[]).find((x) => x.id === s(fd, `var${i}`));
         if (!v) throw error("Elige la variedad cosechada (del maestro de cultivos)");
         Object.assign(l, { kg, cultivo: v.cultivo, variedad: v.variedad });
       }
       lineas.push(l);
-    }
-    if (!lineas.length) throw error("Añade al menos una tarea con sus horas");
+    });
+    if (!lineas.length) throw error("Indica las horas de al menos una tarea");
     const nuevas = lineas.reduce((a, l) => a + l.h, 0);
     if (nuevas > 24) throw error("Un trabajador no puede tener más de 24 h en un día");
+    // Horas extra por trabajador (incluidas en el total): se reparten desde la última tarea hacia atrás, sin pasar de las horas de cada una
+    const extraTotal = n(fd, "extra") ?? 0;
+    if (Number.isNaN(extraTotal) || extraTotal < 0) throw error("Horas extra no válidas");
+    if (extraTotal > nuevas) throw error(`Las horas extra (${extraTotal.toLocaleString("es-ES")}) no pueden superar las horas totales (${nuevas.toLocaleString("es-ES")})`);
+    let resto = extraTotal;
+    for (const l of [...lineas].reverse()) { l.extra = Math.min(resto, l.h); resto = Math.round((resto - l.extra) * 100) / 100; }
 
     const { data: previos } = await db.from("partes_trabajo").select("trabajador_id,horas_por_trabajador,num_trabajadores").eq("fecha", fecha).in("trabajador_id", ids);
     const ya = new Map<string, number>();
@@ -770,7 +771,7 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
     const fallos: string[] = [];
     for (const tid of ids) for (const l of lineas) {
       const { error } = await db.from("partes_trabajo").insert({
-        fecha, finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, tipo_trabajo: l.tarea, actividad: l.actividad, origen: "manual",
+        fecha, finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, horas_extra_por_trabajador: l.extra, tipo_trabajo: l.tarea, actividad: l.actividad, origen: "manual",
       });
       if (!error) hechos++; else if (error.code === "23505") duplicados++; else if (fallos.length < 2) fallos.push(msgError(error));
     }
