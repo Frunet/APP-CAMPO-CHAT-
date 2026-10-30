@@ -25,6 +25,7 @@ export default function FormHoras({ fincas, trabajadores, variedades, hoy }: { f
   const [sel, setSel] = useState<string[]>([]);
   const [horas, setHoras] = useState<string[]>(vacias());
   const [extra, setExtra] = useState("");
+  const [tractor, setTractor] = useState("");
   const [kg, setKg] = useState("");
   const [variedad, setVariedad] = useState("");
   const total = horas.reduce((a, h) => a + num(h), 0);
@@ -40,7 +41,7 @@ export default function FormHoras({ fincas, trabajadores, variedades, hoy }: { f
     <ActionForm
       action={async (fd) => { const r = await registrarHoras(fd); setTick((t) => t + 1); return r; }}
       label="Añadir" reset={false} className="space-y-4"
-      alTerminar={() => { setSel([]); setHoras(vacias()); setExtra(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false); }}>
+      alTerminar={() => { setSel([]); setHoras(vacias()); setExtra(""); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false); }}>
       <section className="rounded-lg border border-stone-200 p-3">
         <p className="mb-2 text-sm font-semibold uppercase tracking-wide">Seleccione a los empleados <span className="font-normal normal-case text-stone-500">({sel.length} marcados)</span></p>
         <input className="input mb-2" placeholder="Buscar por código o nombre…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
@@ -82,6 +83,7 @@ export default function FormHoras({ fincas, trabajadores, variedades, hoy }: { f
           </>
         )}
 
+        <Field label="🚜 Tractor: horas del día (de la finca, no del personal)"><input name="tractor" inputMode="decimal" className="input" placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Field>
         <Field label="De ellas, horas extra (por trabajador)"><input name="extra" inputMode="decimal" className={`input ${extraN > total ? "!border-red-400" : ""}`} placeholder="0" value={extra} onChange={(e) => setExtra(e.target.value)} /></Field>
         <Field label="Observaciones" wide><input name="actividad" className="input" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Field>
 

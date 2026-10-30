@@ -728,7 +728,7 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
   return run(["/horas", "/chat", "/resultados", "/nominas", "/"], async ({ db }) => {
     const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
     const fecha = fechaZ.parse(s(fd, "fecha"));
-    const ids = z.array(z.string().uuid()).min(1, "Elige al menos un trabajador").max(100).parse(fd.getAll("trabajador").map(String));
+    const ids = z.array(z.string().uuid()).max(100).parse(fd.getAll("trabajador").map(String));
     const error = (m: string) => new z.ZodError([{ code: "custom", path: [], message: m }]);
     const obs = s(fd, "actividad")?.slice(0, 400) ?? null;
     const { data: vars } = await db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true);
@@ -747,7 +747,11 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
       }
       lineas.push(l);
     });
-    if (!lineas.length) throw error("Indica las horas de al menos una tarea");
+    // El tractor es del día y de la finca, no de las personas: un solo cajón de horas, sin trabajadores
+    const tractor = n(fd, "tractor") ?? 0;
+    if (Number.isNaN(tractor) || tractor < 0 || tractor > 24) throw error("Las horas de tractor deben estar entre 0 y 24");
+    if (!lineas.length && !tractor) throw error("Indica las horas de al menos una tarea o del tractor");
+    if (lineas.length && !ids.length) throw error("Elige al menos un trabajador");
     const nuevas = lineas.reduce((a, l) => a + l.h, 0);
     if (nuevas > 24) throw error("Un trabajador no puede tener más de 24 h en un día");
     // Horas extra por trabajador (incluidas en el total): se reparten desde la última tarea hacia atrás, sin pasar de las horas de cada una
@@ -757,7 +761,7 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
     let resto = extraTotal;
     for (const l of [...lineas].reverse()) { l.extra = Math.min(resto, l.h); resto = Math.round((resto - l.extra) * 100) / 100; }
 
-    const { data: previos } = await db.from("partes_trabajo").select("trabajador_id,horas_por_trabajador,num_trabajadores").eq("fecha", fecha).in("trabajador_id", ids);
+    const { data: previos } = ids.length ? await db.from("partes_trabajo").select("trabajador_id,horas_por_trabajador,num_trabajadores").eq("fecha", fecha).in("trabajador_id", ids) : { data: [] };
     const ya = new Map<string, number>();
     for (const p of (previos ?? []) as any[]) ya.set(p.trabajador_id, (ya.get(p.trabajador_id) ?? 0) + Number(p.horas_por_trabajador) * (Number(p.num_trabajadores) || 1));
     const pasan = ids.filter((id) => (ya.get(id) ?? 0) + nuevas > MAX_HORAS_DIA);
@@ -785,8 +789,17 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
       const { error } = await db.from("cosechas").insert({ fecha, finca_id, cultivo: l.cultivo, variedad: l.variedad, kg: l.kg, origen: "manual" });
       if (!error) cosechas++; else if (fallos.length < 2) fallos.push(`cosecha: ${msgError(error)}`);
     }
-    if (!hechos && !duplicados) throw { message: fallos[0] ?? "No se pudo guardar." };
-    return `${hechos} parte(s) guardado(s) para ${ids.length} trabajador(es)` + (cosechas ? `; ${cosechas} cosecha(s) anotada(s)` : "") + (duplicados ? `; ${duplicados} ya existían` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + (pasan.length ? ` (aviso: ${pasan.length} pasan de ${MAX_HORAS_DIA} h)` : "") + ".";
+    if (lineas.length && !hechos && !duplicados) throw { message: fallos[0] ?? "No se pudo guardar." };
+    let tractorMsg = "";
+    if (tractor > 0) {
+      const { data: ex } = await db.from("horas_tractor").select("id,horas").eq("fecha", fecha).eq("finca_id", finca_id).maybeSingle();
+      const { error } = ex
+        ? await db.from("horas_tractor").update({ horas: tractor, observaciones: obs }).eq("id", ex.id)
+        : await db.from("horas_tractor").insert({ fecha, finca_id, horas: tractor, observaciones: obs });
+      if (error) { if (!lineas.length) throw error; fallos.push(`tractor: ${msgError(error)}`); }
+      else tractorMsg = ex ? `Tractor: ese día ya tenía ${Number(ex.horas).toLocaleString("es-ES")} h y se ha dejado en ${tractor.toLocaleString("es-ES")} h` : `Tractor: ${tractor.toLocaleString("es-ES")} h anotadas`;
+    }
+    return (lineas.length ? `${hechos} parte(s) guardado(s) para ${ids.length} trabajador(es)` : "") + (tractorMsg ? `${lineas.length ? "; " : ""}${tractorMsg}` : "") + (cosechas ? `; ${cosechas} cosecha(s) anotada(s)` : "") + (duplicados ? `; ${duplicados} ya existían` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + (pasan.length ? ` (aviso: ${pasan.length} pasan de ${MAX_HORAS_DIA} h)` : "") + ".";
   });
 }
 

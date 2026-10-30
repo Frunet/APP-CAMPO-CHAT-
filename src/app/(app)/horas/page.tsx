@@ -25,6 +25,13 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
   if (f.trabajador) q = q.eq("trabajador_id", f.trabajador);
   if (f.tarea) q = q.eq("tipo_trabajo", f.tarea);
   const { data, error } = await q;
+  // El tractor es del día y la finca (no del personal): se lista aparte y solo con filtro de fechas
+  let qt = ctx.db.from("horas_tractor").select("id,fecha,horas,observaciones,fincas(nombre)").order("fecha", { ascending: false }).limit(500);
+  if (f.desde) qt = qt.gte("fecha", f.desde);
+  if (f.hasta) qt = qt.lte("fecha", f.hasta);
+  const { data: tr } = f.trabajador || f.tarea ? { data: [] } : await qt;
+  const tractores = (tr ?? []) as any[];
+  const horasTractor = tractores.reduce((a, r) => a + Number(r.horas ?? 0), 0);
   const filas = (data ?? []) as any[];
   const horas = filas.reduce((a, r) => a + Number(r.horas_totales ?? 0), 0);
   const coste = filas.reduce((a, r) => a + Number(r.coste_total ?? 0), 0);
@@ -74,7 +81,18 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
           </tbody>
         </table>
       </div>
-      {filas.length > MOSTRAR && <p className="text-xs text-stone-500">Se muestran los {MOSTRAR} más recientes de {filas.length}; el CSV lleva todos.</p>}
+      {tractores.length > 0 && (
+        <div className="card overflow-x-auto p-0">
+          <p className="px-3 pt-3 text-sm font-medium">🚜 Horas de tractor <span className="font-normal text-stone-500">· {num(horasTractor, 2)} h (por día y finca; no cuentan como horas del personal)</span></p>
+          <table className="w-full">
+            <thead><tr>{["Fecha", "Finca", "Horas", "Observaciones"].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+            <tbody className="divide-y divide-stone-100">
+              {tractores.map((r) => <tr key={r.id}><td className="td">{fecha(r.fecha)}</td><td className="td">{r.fincas?.nombre}</td><td className="td">{num(r.horas, 2)}</td><td className="td">{r.observaciones ?? "—"}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {filas.length > MOSTRAR &&<p className="text-xs text-stone-500">Se muestran los {MOSTRAR} más recientes de {filas.length}; el CSV lleva todos.</p>}
     </div>
   );
 }
