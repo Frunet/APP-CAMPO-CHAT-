@@ -707,6 +707,42 @@ export async function importarHoras(fd: FormData): Promise<Res> {
   });
 }
 
+/** Importa el histórico de producción (kg e ingresos por finca, cultivo y año) de una tabla resumen. Volver a importar actualiza, no duplica. */
+export async function importarProduccion(fd: FormData): Promise<Res> {
+  return run(["/chat"], async ({ db }) => {
+    const documento_id = z.string().uuid().parse(s(fd, "documento_id"));
+    const mapa = z.record(z.string().uuid().nullable()).parse(JSON.parse(s(fd, "mapa") ?? "{}"));
+    const { data: doc } = await db.from("documentos").select("datos_extraidos").eq("id", documento_id).single();
+    if (!doc?.datos_extraidos?.hoja_produccion) throw { message: "Este documento no es una tabla de producción." };
+    const regs: any[] = doc.datos_extraidos.registros ?? [];
+    const ya = new Set<number>(doc.datos_extraidos.importados ?? []);
+    const hechos: number[] = [], sinFinca = new Set<string>(), fallos: string[] = [];
+    for (let i = 0; i < regs.length; i++) {
+      if (ya.has(i)) continue;
+      const r = regs[i];
+      const finca = mapa[String(r.finca_ref ?? "")];
+      if (!finca) { sinFinca.add(r.finca_ref || "(sin finca)"); continue; }
+      const cultivo = String(r.cultivo).trim().slice(0, 120), anio = Number(r.anio);
+      // El índice único es por minúsculas, así que se busca el dato existente y se actualiza o se inserta
+      const { data: ex } = await db.from("produccion_anual").select("id,cultivo").eq("finca_id", finca).eq("anio", anio).ilike("cultivo", cultivo.replace(/[%_]/g, "\\$&"));
+      const previo = (ex ?? []).find((x: any) => String(x.cultivo).trim().toLowerCase() === cultivo.toLowerCase());
+      const datos = { kg: r.kg ?? null, importe: r.importe ?? null, documento_id };
+      const { error } = previo
+        ? await db.from("produccion_anual").update(datos).eq("id", previo.id)
+        : await db.from("produccion_anual").insert({ finca_id: finca, cultivo, anio, ...datos });
+      if (!error) hechos.push(i); else if (fallos.length < 3) fallos.push(`${cultivo} ${anio}: ${msgError(error)}`);
+    }
+    if (hechos.length) {
+      const importados = [...ya, ...hechos];
+      await db.from("documentos").update({
+        datos_extraidos: { ...doc.datos_extraidos, importados }, estado: importados.length >= regs.length ? "importado" : "revisado",
+      }).eq("id", documento_id);
+    }
+    if (!hechos.length) throw { message: fallos.join(" | ") || (sinFinca.size ? `Elige la finca de: ${[...sinFinca].join(", ")}.` : "No había nada que importar.") };
+    return `${hechos.length} dato(s) de producción guardado(s)` + (sinFinca.size ? `; pendientes de elegir finca: ${[...sinFinca].join(", ")}` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + ".";
+  });
+}
+
 /** El usuario indica qué columna es cada dato de un Excel/CSV de facturas; se relee el original (sin IA). */
 export async function aplicarMapeoDocumento(fd: FormData): Promise<Res> {
   return run(["/chat"], async ({ db }) => {

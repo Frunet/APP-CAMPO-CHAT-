@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { leerHojaProduccion } from "./produccion";
 import { leerHojaHoras } from "./horas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import mammoth from "mammoth";
@@ -109,6 +110,7 @@ async function aTexto(ext: string, buf: Buffer): Promise<string> {
 
 export type Extraccion = {
   hoja_horas?: boolean;
+  hoja_produccion?: boolean;
   tipo_documento: string; fecha_documento?: string | null; proveedor?: string | null;
   resumen: string; texto: string; registros: Record<string, any>[]; importados?: number[];
   referencias_documento?: string[];
@@ -211,6 +213,14 @@ export async function procesarDocumento(db: SupabaseClient, id: string): Promise
       }).eq("id", id);
       if (e3) return { ok: false, error: e3.message };
       return { ok: true, n: horas.registros.length };
+    }
+    const prod = leerHojaProduccion(buf, doc.nombre);
+    if (prod) {
+      const { error: e4 } = await db.from("documentos").update({
+        tipo: "otro", datos_extraidos: { tipo_documento: "otro", hoja_produccion: true, resumen: prod.resumen, registros: prod.registros, importados: [] }, estado: "procesado",
+      }).eq("id", id);
+      if (e4) return { ok: false, error: e4.message };
+      return { ok: true, n: prod.registros.length };
     }
     try {
       const t = await extraerTablaFacturas(db, buf, doc.nombre);
