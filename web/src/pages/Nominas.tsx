@@ -21,7 +21,7 @@ export default function Nominas() {
   }, [f.tipo, f.mes, f.anio, f.trim, f.desde, f.hasta, f.campana]);
 
   if (cargandoAuth) return null;
-  if (!puedeGestionar) return <Navigate to="/" />;
+  if (!puedeGestionar) return <Navigate to="/horas" />;
   const todos = datos?.todos ?? [];
   const trabajador = todos.some((g) => g.clave === f.trabajador) ? f.trabajador : "";
   const res = trabajador ? todos.filter((g) => g.clave === trabajador) : todos;

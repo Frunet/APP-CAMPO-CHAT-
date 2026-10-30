@@ -17,7 +17,7 @@ export default function Maestros() {
   const { esAdmin, cargando } = useAuth();
   const [activa, setActiva] = useState(() => { try { return localStorage.getItem("maestros_seccion") ?? "usuarios"; } catch { return "usuarios"; } });
   if (cargando) return null;
-  if (!esAdmin) return <Navigate to="/" />; // los maestros solo los gestiona el administrador
+  if (!esAdmin) return <Navigate to="/horas" />; // los maestros solo los gestiona el administrador
   const [, , Seccion] = SECCIONES.find(([k]) => k === activa) ?? SECCIONES[0];
   const elegir = (k: string) => { setActiva(k); try { localStorage.setItem("maestros_seccion", k); } catch { /* sin almacenamiento */ } };
 
