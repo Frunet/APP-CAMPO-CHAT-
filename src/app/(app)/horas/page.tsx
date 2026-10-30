@@ -12,7 +12,10 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
   const sp = await searchParams;
   const ctx = await cargarContexto();
   const f = { desde: dia(sp.desde), hasta: dia(sp.hasta), trabajador: uuid(sp.trabajador), tarea: TAREAS_HORAS.includes(sp.tarea as never) ? sp.tarea! : "" };
-  const { data: trab } = await ctx.db.from("trabajadores").select("id,codigo,nombre,finca_id").eq("activo", true).order("nombre");
+  const [{ data: trab }, { data: variedades }] = await Promise.all([
+    ctx.db.from("trabajadores").select("id,codigo,nombre,finca_id").eq("activo", true).order("nombre"),
+    ctx.db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true).order("cultivo").order("variedad"),
+  ]);
 
   let q = ctx.db.from("partes_trabajo")
     .select("id,fecha,horas_por_trabajador,num_trabajadores,horas_totales,coste_total,tipo_trabajo,actividad,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
@@ -35,7 +38,7 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
 
       {ctx.puedeRegistrar ? (
         <section className="card">
-          <FormHoras fincas={ctx.fincas.map((x) => ({ id: x.id, nombre: x.nombre }))} trabajadores={(trab ?? []) as any} hoy={iso(new Date())} />
+          <FormHoras fincas={ctx.fincas.map((x) => ({ id: x.id, nombre: x.nombre }))} trabajadores={(trab ?? []) as any} variedades={(variedades ?? []) as any} hoy={iso(new Date())} />
         </section>
       ) : <p className="text-sm text-stone-500">Tu rol solo permite consultar las horas.</p>}
 
@@ -63,7 +66,7 @@ export default async function Horas({ searchParams }: { searchParams: Promise<Re
             {filas.slice(0, MOSTRAR).map((r) => (
               <tr key={r.id}>
                 <td className="td">{fecha(r.fecha)}</td><td className="td">{r.trabajadores?.codigo ?? "—"}</td><td className="td">{r.trabajadores?.nombre ?? r.trabajador_nombre ?? "—"}</td>
-                <td className="td">{r.fincas?.nombre}</td><td className="td">{r.tipo_trabajo ?? r.actividad ?? "—"}</td><td className="td">{num(r.horas_totales, 2)}</td>
+                <td className="td">{r.fincas?.nombre}</td><td className="td">{r.tipo_trabajo ?? "—"}{r.actividad && <span className="text-xs text-stone-500"> · {r.actividad}</span>}</td><td className="td">{num(r.horas_totales, 2)}</td>
                 {verCoste && <td className="td">{r.coste_total == null ? <span className="text-xs text-amber-600">sin tarifa</span> : eur(r.coste_total)}</td>}
               </tr>
             ))}

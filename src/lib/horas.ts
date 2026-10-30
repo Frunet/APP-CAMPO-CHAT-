@@ -1,8 +1,17 @@
-/** Tareas del registro de horas (las mismas columnas del parte de AppCampo). Se guardan tal cual en partes_trabajo.tipo_trabajo. */
-export const TAREAS_HORAS = [
-  "Instalaciones", "Suelos", "Liado y guía de planta", "Otros cuidados planta", "Riego, abonado y tratamiento", "Cosecha/ Recolección", "Otros",
-] as const;
-export const TAREAS_AYUDA: Record<string, string> = {
-  "Instalaciones": "gomas riego, plásticos…", "Suelos": "arado, desbroce, hierbas…", "Otros cuidados planta": "tala, destalle…", "Riego, abonado y tratamiento": "sulfatos…",
-};
+/**
+ * Tareas del registro de horas (lista fija). Cada una puede exigir un subtipo; Cosecha exige además kg y variedad (del maestro de cultivos).
+ * La tarea se guarda en partes_trabajo.tipo_trabajo y el subtipo al principio de actividad («Desbrozadora · texto libre»).
+ */
+export type TareaDef = { nombre: string; subtipos?: readonly string[]; cosecha?: boolean };
+
+export const TAREAS: readonly TareaDef[] = [
+  { nombre: "Hierba", subtipos: ["Desbrozadora", "Tractor"] },
+  { nombre: "Aplicaciones foliares" },
+  { nombre: "Riego" },
+  { nombre: "Reparaciones", subtipos: ["Maquinaria", "Riego"] },
+  { nombre: "Poda" },
+  { nombre: "Obra" },
+  { nombre: "Cosecha", cosecha: true },
+];
+export const TAREAS_HORAS = TAREAS.map((t) => t.nombre);
 export const MAX_HORAS_DIA = 12;

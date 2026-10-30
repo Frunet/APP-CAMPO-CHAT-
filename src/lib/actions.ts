@@ -1,5 +1,5 @@
 "use server";
-import { MAX_HORAS_DIA, TAREAS_HORAS } from "@/lib/horas";
+import { MAX_HORAS_DIA, TAREAS } from "@/lib/horas";
 import { buscarTrabajador } from "@/lib/documentos/nombres";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -728,17 +728,32 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
     const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
     const fecha = fechaZ.parse(s(fd, "fecha"));
     const ids = z.array(z.string().uuid()).min(1, "Elige al menos un trabajador").max(100).parse(fd.getAll("trabajador").map(String));
-    const lineas: { tarea: string; h: number }[] = [];
-    for (let i = 0; i < TAREAS_HORAS.length; i++) {
-      const h = n(fd, `h${i}`);
-      if (h == null || h === 0) continue;
-      if (Number.isNaN(h) || h < 0 || h > 24) throw new z.ZodError([{ code: "custom", path: [], message: `Horas no válidas en «${TAREAS_HORAS[i]}»` }]);
-      lineas.push({ tarea: TAREAS_HORAS[i], h });
+    const error = (m: string) => new z.ZodError([{ code: "custom", path: [], message: m }]);
+    const obs = s(fd, "actividad")?.slice(0, 400) ?? null;
+    const { data: vars } = await db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true);
+    const lineas: { tarea: string; h: number; actividad: string | null; kg?: number; cultivo?: string; variedad?: string | null }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const nombre = s(fd, `l${i}_tarea`);
+      if (!nombre) continue;
+      const def = TAREAS.find((t) => t.nombre === nombre);
+      if (!def) throw error(`Tarea no válida: «${nombre}»`);
+      const h = n(fd, `l${i}_horas`);
+      if (h == null || Number.isNaN(h) || h <= 0 || h > 24) throw error(`Indica las horas de «${nombre}» (entre 0 y 24)`);
+      const sub = s(fd, `l${i}_subtipo`);
+      if (def.subtipos && (!sub || !def.subtipos.includes(sub))) throw error(`«${nombre}» necesita un subtipo (${def.subtipos.join(" o ")})`);
+      const l: (typeof lineas)[number] = { tarea: nombre, h, actividad: [def.subtipos ? sub : null, obs].filter(Boolean).join(" · ") || null };
+      if (def.cosecha) {
+        const kg = n(fd, `l${i}_kg`);
+        if (kg == null || Number.isNaN(kg) || kg <= 0 || kg > 10_000_000) throw error("Indica los kg cosechados en la tarea Cosecha");
+        const v = ((vars ?? []) as any[]).find((x) => x.id === s(fd, `l${i}_variedad`));
+        if (!v) throw error("Elige la variedad cosechada (del maestro de cultivos)");
+        Object.assign(l, { kg, cultivo: v.cultivo, variedad: v.variedad });
+      }
+      lineas.push(l);
     }
-    if (!lineas.length) throw new z.ZodError([{ code: "custom", path: [], message: "Indica las horas de al menos una tarea" }]);
+    if (!lineas.length) throw error("Añade al menos una tarea con sus horas");
     const nuevas = lineas.reduce((a, l) => a + l.h, 0);
-    if (nuevas > 24) throw new z.ZodError([{ code: "custom", path: [], message: "Un trabajador no puede tener más de 24 h en un día" }]);
-    const actividad = s(fd, "actividad")?.slice(0, 500) ?? null;
+    if (nuevas > 24) throw error("Un trabajador no puede tener más de 24 h en un día");
 
     const { data: previos } = await db.from("partes_trabajo").select("trabajador_id,horas_por_trabajador,num_trabajadores").eq("fecha", fecha).in("trabajador_id", ids);
     const ya = new Map<string, number>();
@@ -754,12 +769,22 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
     const fallos: string[] = [];
     for (const tid of ids) for (const l of lineas) {
       const { error } = await db.from("partes_trabajo").insert({
-        fecha, finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, tipo_trabajo: l.tarea, actividad, origen: "manual",
+        fecha, finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, tipo_trabajo: l.tarea, actividad: l.actividad, origen: "manual",
       });
       if (!error) hechos++; else if (error.code === "23505") duplicados++; else if (fallos.length < 2) fallos.push(msgError(error));
     }
+    // Cosecha: los kg son de la tarea (no de cada persona), así que se anota una sola cosecha por línea, salvo que ya exista igual
+    let cosechas = 0;
+    for (const l of lineas.filter((x) => x.kg)) {
+      let q = db.from("cosechas").select("id").eq("fecha", fecha).eq("finca_id", finca_id).eq("cultivo", l.cultivo!).eq("kg", l.kg!);
+      q = l.variedad ? q.eq("variedad", l.variedad) : q.is("variedad", null);
+      const { data: ex } = await q.limit(1);
+      if (ex?.length) continue;
+      const { error } = await db.from("cosechas").insert({ fecha, finca_id, cultivo: l.cultivo, variedad: l.variedad, kg: l.kg, origen: "manual" });
+      if (!error) cosechas++; else if (fallos.length < 2) fallos.push(`cosecha: ${msgError(error)}`);
+    }
     if (!hechos && !duplicados) throw { message: fallos[0] ?? "No se pudo guardar." };
-    return `${hechos} parte(s) guardado(s) para ${ids.length} trabajador(es)` + (duplicados ? `; ${duplicados} ya existían` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + (pasan.length ? ` (aviso: ${pasan.length} pasan de ${MAX_HORAS_DIA} h)` : "") + ".";
+    return `${hechos} parte(s) guardado(s) para ${ids.length} trabajador(es)` + (cosechas ? `; ${cosechas} cosecha(s) anotada(s)` : "") + (duplicados ? `; ${duplicados} ya existían` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + (pasan.length ? ` (aviso: ${pasan.length} pasan de ${MAX_HORAS_DIA} h)` : "") + ".";
   });
 }
 
