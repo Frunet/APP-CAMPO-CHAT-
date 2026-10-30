@@ -33,7 +33,7 @@ function Shell() {
     <div className="fr-fondo min-h-screen" style={fondo}>
       <header ref={medirCabecera} className="fr-cabecera sticky top-0 z-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
-          <span className="fr-marca">FRUNET <small>Control de fincas</small></span>
+          <span className="fr-marca flex items-center gap-2"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="FRUNET" className="fr-logo" /><small>Control de fincas</small></span>
           <nav className="fr-nav flex flex-wrap gap-2 text-sm">
             {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : m.solo === "hist" ? (perfil.rol === "administrador" || perfil.rol === "encargado") : puedeGestionar)).map((m) => (
               <Link key={m.to} to={m.to} className={`fr-pestana ${(ruta === m.to || (m.to === "/horas" && ruta === "/")) ? "fr-pestana-activa" : ""}`}>{m.texto}</Link>

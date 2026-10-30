@@ -26,6 +26,9 @@ body { @apply text-stone-900 antialiased; background: #f1efec; }
 .fr-pestana:hover { background: #e8f6e7; }
 .fr-pestana-activa, .fr-pestana-activa:hover { background: #118a11; color: #fff; }
 
+.fr-logo { height: 2.6rem; width: 2.6rem; border-radius: 9999px; }
+.fr-marca small { margin-left: 0; }
+
 /* Títulos de página */
 main h1 { font-family: "Oswald", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #0f6b0f; }
 
