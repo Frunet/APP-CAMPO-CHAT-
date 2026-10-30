@@ -22,12 +22,12 @@ export async function registrarHoras(e: EntradaHoras): Promise<string> {
   const obs = e.actividad.trim().slice(0, 400) || null;
   const { data: vars } = await db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true);
 
-  const lineas: { tarea: string; h: number; extra: number; actividad: string | null; kg?: number; cultivo?: string; variedad?: string | null }[] = [];
+  const lineas: { mayor: string; tarea: string; h: number; extra: number; actividad: string | null; kg?: number; cultivo?: string; variedad?: string | null }[] = [];
   CAMPOS_HORAS.forEach((c, i) => {
     const h = dec(e.horas[i] ?? "");
     if (h == null || h === 0) return;
     if (Number.isNaN(h) || h < 0 || h > 24) falla(`Horas no válidas en «${c.etiqueta}»`);
-    const l: (typeof lineas)[number] = { tarea: c.tarea, h: h!, extra: 0, actividad: [c.subtipo, obs].filter(Boolean).join(" · ") || null };
+    const l: (typeof lineas)[number] = { mayor: c.mayor, tarea: c.tarea, h: h!, extra: 0, actividad: [c.subtipo, obs].filter(Boolean).join(" · ") || null };
     if (c.cosecha) {
       const kg = numero(e.kg);
       if (kg == null || kg <= 0 || kg > 10_000_000) falla("Indica los kg cosechados en Cosecha");
@@ -67,7 +67,7 @@ export async function registrarHoras(e: EntradaHoras): Promise<string> {
   const fallos: string[] = [];
   for (const tid of ids) for (const l of lineas) {
     const { error } = await db.from("partes_trabajo").insert({
-      fecha: e.fecha, finca_id: e.finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, horas_extra_por_trabajador: l.extra, tipo_trabajo: l.tarea, actividad: l.actividad, origen: "manual",
+      fecha: e.fecha, finca_id: e.finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, horas_extra_por_trabajador: l.extra, tipo_trabajo: l.tarea, mayor: l.mayor, actividad: l.actividad, origen: "manual",
     });
     if (!error) hechos++; else if (error.code === "23505") duplicados++; else if (fallos.length < 2) fallos.push(msgError(error));
   }
