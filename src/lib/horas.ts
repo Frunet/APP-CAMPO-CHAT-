@@ -5,7 +5,7 @@
 export type TareaDef = { nombre: string; subtipos?: readonly string[]; cosecha?: boolean };
 
 export const TAREAS: readonly TareaDef[] = [
-  { nombre: "Hierba", subtipos: ["Desbrozadora", "Tractor"] },
+  { nombre: "Hierba", subtipos: ["Desbrozadora"] },
   { nombre: "Aplicaciones foliares" },
   { nombre: "Riego" },
   { nombre: "Reparaciones", subtipos: ["Maquinaria", "Riego"] },
