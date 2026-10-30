@@ -5,9 +5,10 @@ import Login from "./pages/Login";
 import Horas from "./pages/Horas";
 import Nominas from "./pages/Nominas";
 import Maestros from "./pages/Maestros";
+import Ultimos7 from "./pages/Ultimos7";
 
 const MENU: { to: string; texto: string; solo?: "gestion" | "admin" }[] = [
-  { to: "/horas", texto: "⏱️ Horas" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
+  { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
 ];
 
 function Shell() {
@@ -17,7 +18,7 @@ function Shell() {
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : Horas;
+  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : Horas;
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-white">
