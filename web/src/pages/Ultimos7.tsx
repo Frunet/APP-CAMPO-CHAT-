@@ -66,7 +66,7 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
     return (
       <tr>
         <td className="td font-mono text-xs">{p.trabajadores?.codigo ?? "—"}</td><td className="td">{nombre}</td><td className="td">{p.fincas?.nombre}</td>
-        <td className="td">{p.tipo_trabajo ?? "—"}{p.mayor && <span className="block text-xs text-stone-400">{p.mayor}</span>}{p.actividad && <span className="block text-xs text-stone-500">{p.actividad}</span>}</td>
+        <td className="td">{p.tipo_trabajo ?? "—"}{p.actividad && <span className="block text-xs text-stone-500">{p.actividad}</span>}</td>
         <td className="td whitespace-nowrap">{num(p.horas_totales, 2)}{Number(p.horas_extra_por_trabajador) > 0 && <span className="text-xs text-amber-700"> ({num(p.horas_extra_por_trabajador * p.num_trabajadores, 2)} extra)</span>}</td>
         <td className="td whitespace-nowrap text-right">
           <button type="button" className="text-sm text-brand-700 underline" onClick={() => setEditando(true)}>Editar</button>{" · "}
@@ -84,7 +84,7 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
           <Field label="Tarea">
             <select className="input" value={sel} onChange={(e) => setSel(e.target.value)}>
               {ini.sel === KEEP && <option value={KEEP}>Mantener: {p.tipo_trabajo ?? "sin tarea"}</option>}
-              {CAMPOS_HORAS.map((c, i) => c.cosecha && ini.sel !== String(i) ? null : <option key={c.etiqueta} value={i}>{c.mayor} › {c.etiqueta}</option>)}
+              {CAMPOS_HORAS.map((c, i) => c.cosecha && ini.sel !== String(i) ? null : <option key={c.etiqueta} value={i}>{c.etiqueta}</option>)}
             </select>
           </Field>
           <Field label="Horas"><input inputMode="decimal" className="input" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
@@ -134,17 +134,14 @@ function FilaTractor({ t, editable, alCambiar }: { t: Tractor; editable: boolean
   );
 }
 
-const COLUMNAS: { mayor: string; pista: string }[] = [
-  { mayor: "Instalaciones", pista: "obra, reparaciones…" },
-  { mayor: "Suelos", pista: "desbrozadora, tractor…" },
-  { mayor: "Liado y guiado", pista: "" },
-  { mayor: "Otros cuidados de planta", pista: "poda, foliares…" },
-  { mayor: "Riego", pista: "" },
-  { mayor: "Cosecha", pista: "recolección" },
-  { mayor: "Otros", pista: "" },
-  { mayor: "Revisión finca", pista: "" },
-];
-const SIN_MAYOR = "Sin clasificar";
+/** Columnas: cada subtarea del catálogo («Reparaciones · Riego», «Hierba · Tractor», «Poda»…), sin agrupar por mayor. */
+const COLUMNAS: { clave: string }[] = CAMPOS_HORAS.map((c) => ({ clave: c.etiqueta }));
+const SIN_MAYOR = "Sin detallar";
+/** Subtarea (columna) de un parte; las tareas antiguas que no están en el catálogo van a «Sin detallar». */
+const subtareaDe = (p: Parte) => {
+  const c = CAMPOS_HORAS.find((x) => x.tarea === p.tipo_trabajo && (!x.subtipo || (p.actividad ?? "").startsWith(x.subtipo)));
+  return c ? c.etiqueta : SIN_MAYOR;
+};
 const IconoEditar = () => (
   <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -170,7 +167,7 @@ function Detalle({ f, alCambiar, eliminarTodo }: { f: Fila; alCambiar: () => voi
 
 /**
  * Revisión de lo registrado en los últimos 7 días, con el aspecto de AppCampo/Frunet: eliges el día y ves una fila por trabajador
- * con sus horas por mayor; el lápiz abre sus líneas para corregirlas o eliminarlas.
+ * con sus horas por subtarea; el lápiz abre sus líneas para corregirlas o eliminarlas.
  */
 export default function Ultimos7() {
   const { puedeRegistrar } = useAuth();
@@ -203,12 +200,12 @@ export default function Ultimos7() {
     const f: Fila = mapa.get(clave) ?? { clave, nombre: nombreDe(p), codigo: p.trabajadores?.codigo ?? null, finca: p.fincas?.nombre ?? "", total: 0, extra: 0, por: new Map(), lineas: [] };
     const h = Number(p.horas_totales ?? 0);
     f.total += h; f.extra += Number(p.horas_extra_por_trabajador ?? 0) * p.num_trabajadores;
-    const m = p.mayor ?? SIN_MAYOR;
+    const m = subtareaDe(p);
     f.por.set(m, (f.por.get(m) ?? 0) + h);
     f.lineas.push(p); mapa.set(clave, f);
   }
   const lista = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  const cols = lista.some((f) => f.por.has(SIN_MAYOR)) ? [...COLUMNAS, { mayor: SIN_MAYOR, pista: "" }] : COLUMNAS;
+  const cols = lista.some((f) => f.por.has(SIN_MAYOR)) ? [...COLUMNAS, { clave: SIN_MAYOR }] : COLUMNAS;
   const celda = (v?: number) => (v ? <b>{num(v, 2)}</b> : <span className="text-stone-300">0</span>);
   const anchoTabla = 4 + cols.length;
 
@@ -258,7 +255,7 @@ export default function Ultimos7() {
                   <th className="fr-fecha">{fecha(elegido)}</th>
                   <th>Horas diarias</th>
                   <th>Finca</th>
-                  {cols.map((c) => <th key={c.mayor}>{c.mayor}{c.pista && <small>({c.pista})</small>}</th>)}
+                  {cols.map((c) => <th key={c.clave}>{c.clave}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -273,7 +270,7 @@ export default function Ultimos7() {
                       <td className="text-left">{f.nombre}{f.codigo && <span> ({f.codigo})</span>}</td>
                       <td>{num(f.total, 2)}{f.extra > 0 && <small className="!inline ml-1 !text-amber-700">({num(f.extra, 2)} extra)</small>}</td>
                       <td className="text-left">{f.finca}</td>
-                      {cols.map((c) => <td key={c.mayor}>{celda(f.por.get(c.mayor))}</td>)}
+                      {cols.map((c) => <td key={c.clave}>{celda(f.por.get(c.clave))}</td>)}
                     </tr>
                     {abierto === f.clave && (
                       <tr>
@@ -286,13 +283,13 @@ export default function Ultimos7() {
                 ))}
                 <tr className="fr-total">
                   <td /><td className="text-left">Total del día</td><td>{num(lista.reduce((a, f) => a + f.total, 0), 2)}</td><td />
-                  {cols.map((c) => <td key={c.mayor}>{celda(lista.reduce((a, f) => a + (f.por.get(c.mayor) ?? 0), 0))}</td>)}
+                  {cols.map((c) => <td key={c.clave}>{celda(lista.reduce((a, f) => a + (f.por.get(c.clave) ?? 0), 0))}</td>)}
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {/* Móvil: una tarjeta por trabajador, con solo los mayores en los que tiene horas */}
+          {/* Móvil: una tarjeta por trabajador, con solo las subtareas en las que tiene horas */}
           <div className="space-y-3 sm:hidden">
             {lista.map((f) => (
               <div key={f.clave} className="card">
@@ -304,7 +301,7 @@ export default function Ultimos7() {
                   {puedeRegistrar && <button type="button" aria-label={`Modificar o eliminar ${f.nombre}`} className="fr-lapiz" onClick={() => setAbierto(abierto === f.clave ? null : f.clave)}><IconoEditar /></button>}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {cols.filter((c) => f.por.get(c.mayor)).map((c) => <span key={c.mayor} className="fr-chip">{c.mayor} <b>{num(f.por.get(c.mayor), 2)}</b></span>)}
+                  {cols.filter((c) => f.por.get(c.clave)).map((c) => <span key={c.clave} className="fr-chip">{c.clave} <b>{num(f.por.get(c.clave), 2)}</b></span>)}
                 </div>
                 {abierto === f.clave && <div className="mt-3 border-t border-stone-200 pt-3"><Detalle f={f} alCambiar={recargar} eliminarTodo={eliminarTodo} /></div>}
               </div>
