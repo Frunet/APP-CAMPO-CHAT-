@@ -5,26 +5,27 @@ import Login from "./pages/Login";
 import Inicio from "./pages/Inicio";
 import Horas from "./pages/Horas";
 import Nominas from "./pages/Nominas";
+import Maestros from "./pages/Maestros";
 
-const MENU: { to: string; texto: string; solo?: "gestion" }[] = [
-  { to: "/", texto: "🏠 Inicio" }, { to: "/horas", texto: "⏱️ Horas" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" },
+const MENU: { to: string; texto: string; solo?: "gestion" | "admin" }[] = [
+  { to: "/", texto: "🏠 Inicio" }, { to: "/horas", texto: "⏱️ Horas" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
 ];
 
 function Shell() {
-  const { cargando, session, perfil, puedeGestionar } = useAuth();
+  const { cargando, session, perfil, puedeGestionar, esAdmin } = useAuth();
   const ruta = useRuta();
   if (cargando) return <p className="mt-[30vh] text-center text-stone-500">Cargando…</p>;
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/horas" ? Horas : ruta === "/nominas" ? Nominas : Inicio;
+  const Pagina = ruta === "/horas" ? Horas : ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : Inicio;
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-white">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
           <span className="font-semibold text-brand-700">🌱 Control de Fincas</span>
           <nav className="flex flex-wrap gap-1 text-sm">
-            {MENU.filter((m) => !m.solo || puedeGestionar).map((m) => (
+            {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : puedeGestionar)).map((m) => (
               <Link key={m.to} to={m.to} className={`rounded-lg px-3 py-1.5 ${ruta === m.to ? "bg-brand-50 font-medium text-brand-700" : "text-stone-600 hover:bg-stone-100"}`}>{m.texto}</Link>
             ))}
           </nav>
