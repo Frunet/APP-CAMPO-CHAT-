@@ -1,5 +1,6 @@
 "use server";
 import { MAX_HORAS_DIA, TAREAS } from "@/lib/horas";
+import { numero } from "@/lib/documentos/produccion";
 import { buscarTrabajador } from "@/lib/documentos/nombres";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -743,8 +744,8 @@ export async function registrarHoras(fd: FormData): Promise<Res> {
       if (def.subtipos && (!sub || !def.subtipos.includes(sub))) throw error(`«${nombre}» necesita un subtipo (${def.subtipos.join(" o ")})`);
       const l: (typeof lineas)[number] = { tarea: nombre, h, actividad: [def.subtipos ? sub : null, obs].filter(Boolean).join(" · ") || null };
       if (def.cosecha) {
-        const kg = n(fd, `l${i}_kg`);
-        if (kg == null || Number.isNaN(kg) || kg <= 0 || kg > 10_000_000) throw error("Indica los kg cosechados en la tarea Cosecha");
+        const kg = numero(s(fd, `l${i}_kg`)); // admite 1.250 (mil doscientos cincuenta) y 1250,5
+        if (kg == null || kg <= 0 || kg > 10_000_000) throw error("Indica los kg cosechados en la tarea Cosecha");
         const v = ((vars ?? []) as any[]).find((x) => x.id === s(fd, `l${i}_variedad`));
         if (!v) throw error("Elige la variedad cosechada (del maestro de cultivos)");
         Object.assign(l, { kg, cultivo: v.cultivo, variedad: v.variedad });
