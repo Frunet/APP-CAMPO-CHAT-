@@ -10,3 +10,4 @@ next-env.d.ts
 
 .app.log
 .app.err.log
+.env.nube
