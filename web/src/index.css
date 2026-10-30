@@ -1,27 +1,51 @@
 @import "tailwindcss";
 
+/* Estilo Frunet (frunet.net / AppCampo): fondo de verduras, verde #118a11, tablas con cabecera verde clara, botones naranja #fd9927 */
 @theme {
   --color-brand-50: #f0f9f1;
   --color-brand-100: #dcf1de;
   --color-brand-500: #3f9a4b;
-  --color-brand-600: #2f7d3a;
-  --color-brand-700: #266530;
+  --color-brand-600: #118a11;
+  --color-brand-700: #0f6b0f;
   --color-brand-900: #163b1c;
+  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
 }
 
-body { @apply bg-stone-50 text-stone-900 antialiased; }
-.card { @apply rounded-xl border border-stone-200 bg-white p-4 shadow-sm; }
-.btn { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50; }
-.btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 disabled:opacity-50; }
-.input { @apply w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100; }
-.th { @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-stone-500; }
-.td { @apply px-3 py-2 text-sm; }
+body { @apply text-stone-900 antialiased; background: #f1efec; }
 
-/* Módulo «Últimos 7 días»: aspecto de AppCampo / Frunet (fondo de verduras, tabla verde, botón naranja) */
-.fr-fondo { background-color: #f1efec; background-size: cover; background-position: center; background-attachment: fixed; }
-.fr-etiqueta { color: #fff; font-weight: 800; font-size: 1rem; letter-spacing: .02em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, .55); }
+.fr-fondo { background-color: rgba(255, 255, 255, .35); background-blend-mode: lighten; background-size: cover; background-position: center; background-attachment: fixed; }
+.fr-fondo main { text-shadow: 0 0 5px rgba(255, 255, 255, .95), 0 0 2px #fff; }
+.fr-fondo main > div > p, .fr-fondo main > div > div:not(.card) > p, .fr-fondo main > div > .flex { color: #1f2937 !important; font-weight: 600; }
+.fr-fondo main .card, .fr-fondo main .fr-tabla, .fr-fondo main button, .fr-fondo main .fr-boton { text-shadow: none; }
+
+/* Cabecera y pestañas */
+.fr-cabecera { background: #fff; border-bottom: 3px solid #118a11; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+.fr-marca { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 1.35rem; letter-spacing: .04em; text-transform: uppercase; color: #111; }
+.fr-marca small { margin-left: .5rem; font-family: "Nunito", sans-serif; font-size: .8rem; font-weight: 800; font-style: italic; letter-spacing: 0; text-transform: none; color: #fd9927; }
+.fr-pestana { border: 2px solid #118a11; border-radius: 9999px; background: #fff; padding: .3rem 1rem; font-weight: 800; color: #118a11; }
+.fr-pestana:hover { background: #e8f6e7; }
+.fr-pestana-activa, .fr-pestana-activa:hover { background: #118a11; color: #fff; }
+
+/* Títulos de página */
+main h1 { font-family: "Oswald", sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #0f6b0f; }
+
+/* Componentes comunes */
+.card { @apply rounded-2xl bg-white/95 p-4 shadow-md; border: 2px solid #118a11; }
+.btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-extrabold uppercase text-white disabled:opacity-50; background: #fd9927; box-shadow: 0 2px 5px rgba(0, 0, 0, .2); }
+.btn:hover { background: #e8890f; }
+.btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold disabled:opacity-50; border: 2px solid #118a11; color: #118a11; }
+.btn-ghost:hover { background: #e8f6e7; }
+.input { @apply w-full bg-white px-4 py-2 text-sm focus:outline-none; border: 2px solid #118a11; border-radius: 9999px; color: #118a11; font-weight: 700; }
+.input:focus { box-shadow: 0 0 0 3px #b2e0b0; }
+textarea.input { border-radius: .9rem; }
+.th { @apply px-3 py-2 text-center text-sm font-bold; background: #b2e0b0; border: 1px solid #118a11; color: #111; }
+.td { @apply px-3 py-2 text-sm; border: 1px solid #118a11; }
+
+/* Módulo «Últimos 7 días» */
+.fr-etiqueta { color: #fff; font-weight: 800; font-size: 1rem; letter-spacing: .02em; text-transform: uppercase; }
+.fr-fondo main .fr-etiqueta { text-shadow: 0 1px 3px rgba(0, 0, 0, .55); }
 .fr-select { min-width: 13rem; border: 2px solid #118a11; border-radius: 9999px; background: #fff; padding: .6rem 1.1rem; font-weight: 700; color: #118a11; }
-.fr-boton { display: inline-block; border-radius: 9999px; background: #fd9927; padding: .65rem 1.4rem; font-weight: 800; color: #fff; text-transform: uppercase; font-size: .85rem; text-shadow: 0 1px 2px rgba(0, 0, 0, .3); box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+.fr-boton { display: inline-block; border-radius: 9999px; background: #fd9927; padding: .65rem 1.4rem; font-weight: 800; color: #fff; text-transform: uppercase; font-size: .85rem; box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
 .fr-boton:hover { background: #e8890f; }
 .fr-tabla { border-collapse: collapse; background: #fff; }
 .fr-tabla th, .fr-tabla td { border: 1px solid #118a11; padding: .55rem .6rem; text-align: center; font-size: .95rem; vertical-align: middle; }

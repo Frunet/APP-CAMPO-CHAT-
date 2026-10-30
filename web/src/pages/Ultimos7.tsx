@@ -204,7 +204,7 @@ export default function Ultimos7() {
   }
 
   return (
-    <div className="fr-fondo -mx-4 -my-4 min-h-screen px-4 py-6" style={{ backgroundImage: `url(${import.meta.env.BASE_URL}fondo-frunet.jpg)` }}>
+    <div>
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <label className="block">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { db } from "../supabase";
-import { Field } from "../ui";
+import { Field, fondo } from "../ui";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,9 +19,9 @@ export default function Login() {
   }
 
   return (
-    <div className="mx-auto mt-[15vh] max-w-sm px-4">
-      <form onSubmit={entrar} className="card space-y-3">
-        <h1 className="text-lg font-semibold text-brand-700">🌱 Control de Fincas</h1>
+    <div className="fr-fondo min-h-screen px-4 pt-[12vh]" style={fondo}>
+      <form onSubmit={entrar} className="card mx-auto max-w-sm space-y-3">
+        <h1 className="fr-marca !text-2xl">FRUNET <small>Control de fincas</small></h1>
         <p className="text-xs text-stone-500">Solo para personal autorizado</p>
         <Field label="Usuario o correo"><input type="text" className="input" autoComplete="username" autoCapitalize="none" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <Field label="Contraseña"><input type="password" className="input" autoComplete="current-password" required value={clave} onChange={(e) => setClave(e.target.value)} /></Field>

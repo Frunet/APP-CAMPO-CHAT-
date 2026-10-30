@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from "./auth";
 import { db } from "./supabase";
 import { Link, useRuta } from "./router";
+import { fondo } from "./ui";
 import Login from "./pages/Login";
 import Horas from "./pages/Horas";
 import Nominas from "./pages/Nominas";
@@ -20,22 +21,22 @@ function Shell() {
 
   const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : Horas;
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
-          <span className="font-semibold text-brand-700">🌱 Control de Fincas</span>
-          <nav className="flex flex-wrap gap-1 text-sm">
+    <div className="fr-fondo min-h-screen" style={fondo}>
+      <header className="fr-cabecera sticky top-0 z-10">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
+          <span className="fr-marca">FRUNET <small>Control de fincas</small></span>
+          <nav className="flex flex-wrap gap-2 text-sm">
             {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : puedeGestionar)).map((m) => (
-              <Link key={m.to} to={m.to} className={`rounded-lg px-3 py-1.5 ${(ruta === m.to || (m.to === "/horas" && ruta === "/")) ? "bg-brand-50 font-medium text-brand-700" : "text-stone-600 hover:bg-stone-100"}`}>{m.texto}</Link>
+              <Link key={m.to} to={m.to} className={`fr-pestana ${(ruta === m.to || (m.to === "/horas" && ruta === "/")) ? "fr-pestana-activa" : ""}`}>{m.texto}</Link>
             ))}
           </nav>
-          <span className="ml-auto flex items-center gap-2 text-xs text-stone-500">
+          <span className="ml-auto flex items-center gap-2 text-xs text-stone-600">
             {perfil.nombre} · {perfil.rol}
-            <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => db.auth.signOut()}>Cerrar sesión</button>
+            <button className="btn-ghost !px-3 !py-1 text-xs" onClick={() => db.auth.signOut()}>Cerrar sesión</button>
           </span>
         </div>
       </header>
-      <main className="px-4 py-4"><Pagina /></main>
+      <main className="px-4 py-5"><Pagina /></main>
     </div>
   );
 }

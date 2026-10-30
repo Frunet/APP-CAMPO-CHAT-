@@ -53,7 +53,7 @@ export default function Nominas() {
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full">
-          <thead><tr>{["Trabajador", "Días", "Normales", "Extra", "Festivo", "Total h"].map((h, i) => <th key={h} className={`th ${i ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
+          <thead><tr><th colSpan={6} className="th"><div className="grid grid-cols-[1fr_repeat(5,4.5rem)] gap-x-2">{["Trabajador", "Días", "Normales", "Extra", "Festivo", "Total h"].map((h, i) => <span key={h} className={i ? "text-right" : "text-left"}>{h}</span>)}</div></th></tr></thead>
           <tbody className="divide-y divide-stone-100">
             {res.map((g) => (
               <tr key={g.clave}>

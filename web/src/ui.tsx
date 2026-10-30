@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+/** Fondo de verduras de frunet.net, común a toda la web. */
+export const fondo = { backgroundImage: `url(${import.meta.env.BASE_URL}fondo-frunet.jpg)` };
+
 export function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <label className={`block text-sm ${wide ? "col-span-full" : ""}`}>
