@@ -63,6 +63,23 @@ textarea.input { border-radius: .9rem; }
 .fr-chip { border: 1px solid #118a11; border-radius: 9999px; background: #e8f6e7; padding: .15rem .6rem; font-size: .8rem; }
 .fr-total td { background: #e8f6e7; font-weight: 800; }
 
+/* Horas: campos fijos, solo se desplaza la lista de trabajadores */
+.input-sm { padding: .3rem .7rem; }
+.fr-lleno { background: #e8f6e7; }
+.fr-horas-pagina { display: flex; flex-direction: column; height: calc(100dvh - var(--cab-h, 4rem) - 2.5rem); min-height: 34rem; }
+.fr-horas-card { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: .75rem; }
+.fr-horas { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: .6rem; }
+.fr-horas-campos { flex: none; }
+.fr-horas-lista { display: flex; flex: 1; min-height: 8rem; flex-direction: column; }
+.fr-horas-scroll { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid #118a11; border-radius: .75rem; background: #fff; }
+.fr-horas-barra { display: flex; flex: none; align-items: center; gap: .75rem; border-top: 2px solid #118a11; padding-top: .6rem; }
+@media (min-width: 1024px) {
+  .fr-horas { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-rows: minmax(0, 1fr) auto; gap: .75rem 1rem; }
+  .fr-horas-lista { grid-column: 1; grid-row: 1; min-height: 0; }
+  .fr-horas-campos { grid-column: 2; grid-row: 1; overflow-y: auto; }
+  .fr-horas-barra { grid-column: 1 / -1; grid-row: 2; }
+}
+
 /* Móvil */
 @media (max-width: 640px) {
   .input, .fr-select, select, textarea { font-size: 16px; } /* evita el zoom automático de iOS al pulsar un campo */
@@ -77,4 +94,9 @@ textarea.input { border-radius: .9rem; }
   .card { padding: .8rem; }
   .btn, .btn-ghost { min-height: 2.75rem; }
   .fr-tabla th, .fr-tabla td { padding: .45rem .4rem; font-size: .85rem; }
+}
+@media (max-width: 640px) {
+  .input-sm { padding: .15rem .45rem; min-height: 2.1rem; font-size: 16px; }
+  .fr-horas-card { padding: .5rem; }
+  .fr-horas-lista { min-height: 9rem; }
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth";
 import { db } from "../supabase";
-import { Field, useCarga } from "../ui";
-import { CAMPOS_HORAS, MAX_HORAS_DIA, NOMBRES_MAYOR } from "../lib/horas";
+import { useCarga } from "../ui";
+import { CAMPOS_HORAS, MAX_HORAS_DIA } from "../lib/horas";
 import { registrarHoras } from "../lib/registrarHoras";
 import { iso } from "../lib/format";
 
@@ -10,7 +10,23 @@ type Trab = { id: string; codigo: string | null; nombre: string; finca_id: strin
 type Variedad = { id: string; cultivo: string; variedad: string | null };
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : 0; };
 const vacias = () => CAMPOS_HORAS.map(() => "");
+const es = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 });
 
+/** Etiqueta compacta de dos líneas: el mayor (pequeño) y la tarea. */
+function Caja({ mayor, tarea, children }: { mayor?: string; tarea: string; children: React.ReactNode }) {
+  return (
+    <label className="block min-w-0">
+      {mayor && <span className="hidden truncate text-[10px] font-bold uppercase leading-tight text-brand-700 sm:block">{mayor}</span>}
+      <span className="mb-0.5 line-clamp-2 block min-h-[1.9em] text-[11px] font-semibold leading-tight text-stone-700 sm:text-xs">{tarea}</span>
+      {children}
+    </label>
+  );
+}
+
+/**
+ * Registro de horas. Los campos (finca, fecha, horas por tarea, tractor, extra) y el botón Añadir se quedan fijos en pantalla;
+ * lo único que se desplaza es la lista de trabajadores. En el ordenador, la lista a la izquierda y los campos a la derecha.
+ */
 function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab[]; variedades: Variedad[]; alGuardar: () => void }) {
   const { fincas } = useAuth();
   const hoy = iso(new Date());
@@ -41,6 +57,8 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   }, [trabajadores, fincaEf, buscar]);
   const alternar = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const iCosecha = CAMPOS_HORAS.findIndex((c) => c.cosecha);
+  const pedirForzar = !!msg?.error?.includes("igualmente"); // el servidor avisa de que alguien pasaría de 12 h con lo ya registrado
+  const nombresSel = trabajadores.filter((t) => sel.includes(t.id)).map((t) => t.nombre);
 
   async function enviar(ev: React.FormEvent) {
     ev.preventDefault();
@@ -55,66 +73,70 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
-      <section className="rounded-lg border border-stone-200 p-3">
-        <p className="mb-2 text-sm font-semibold uppercase tracking-wide">Seleccione a los empleados <span className="font-normal normal-case text-stone-500">({sel.length} marcados)</span></p>
-        <input className="input mb-2" placeholder="Buscar por código o nombre…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
-        <div className="max-h-56 overflow-y-auto rounded-lg border border-stone-200">
+    <form onSubmit={enviar} className="fr-horas">
+      {/* Campos: fijos */}
+      <section className="fr-horas-campos space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Caja tarea="Finca *"><select className="input input-sm" required value={fincaEf} onChange={(e) => setFinca(e.target.value)}><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Caja>
+          <Caja tarea="Fecha *"><input type="date" className="input input-sm" required value={fechaD} max={hoy} onChange={(e) => setFecha(e.target.value)} /></Caja>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+          {CAMPOS_HORAS.map((c, i) => (
+            <Caja key={c.etiqueta} mayor={c.mayor} tarea={c.subtipo ? `${c.tarea} · ${c.subtipo}` : c.tarea}>
+              <input inputMode="decimal" className={`input input-sm ${horas[i] ? "fr-lleno" : ""}`} placeholder="0" value={horas[i]} onChange={(e) => setHoras((h) => h.map((x, j) => (j === i ? e.target.value : x)))} />
+            </Caja>
+          ))}
+        </div>
+
+        {iCosecha >= 0 && dec(horas[iCosecha]) > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            <Caja tarea="Kg cosechados *"><input inputMode="decimal" className="input input-sm" required value={kg} onChange={(e) => setKg(e.target.value)} /></Caja>
+            <Caja tarea="Variedad *"><select className="input input-sm" required value={variedad} onChange={(e) => setVariedad(e.target.value)}><option value="">Elige…</option>{variedades.map((v) => <option key={v.id} value={v.id}>{v.cultivo}{v.variedad ? ` · ${v.variedad}` : ""}</option>)}</select></Caja>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+          <Caja tarea="🚜 Tractor día (h)"><input inputMode="decimal" className={`input input-sm ${tractor ? "fr-lleno" : ""}`} placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Caja>
+          <Caja tarea="Extra (h)"><input inputMode="decimal" className={`input input-sm ${extra ? "fr-lleno" : ""} ${extraN > total ? "!border-red-400" : ""}`} placeholder="0" value={extra} onChange={(e) => setExtra(e.target.value)} /></Caja>
+          <div><Caja tarea="Observaciones"><input className="input input-sm" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Caja></div>
+        </div>
+
+        {(total > MAX_HORAS_DIA || extraN > total || pedirForzar) && (
+          <p className={`text-xs ${total > MAX_HORAS_DIA ? "font-bold text-amber-700" : "text-stone-600"}`}>
+            {extraN > total && <span className="text-red-600">Las extra no pueden superar el total. </span>}
+            {total > MAX_HORAS_DIA && <>⚠ Pasa de {MAX_HORAS_DIA} h en un día. </>}
+            <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Registrar igualmente (más de {MAX_HORAS_DIA} h)</label>
+          </p>
+        )}
+      </section>
+
+      {/* Trabajadores: lo único que se desplaza */}
+      <section className="fr-horas-lista">
+        <p className="mb-1.5 text-sm font-extrabold uppercase tracking-wide">Empleados <span className="font-semibold normal-case text-stone-600">({sel.length} marcado{sel.length === 1 ? "" : "s"})</span></p>
+        <input className="input input-sm mb-2" placeholder="Buscar por código o nombre…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
+        <div className="fr-horas-scroll">
           {visibles.map((t) => (
-            <label key={t.id} className="flex cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-3 text-sm last:border-0">
-              <input type="checkbox" checked={sel.includes(t.id)} onChange={() => alternar(t.id)} className="h-5 w-5" />
-              {t.codigo && <span className="font-mono text-xs text-stone-500">{t.codigo}</span>}<span>{t.nombre}</span>
+            <label key={t.id} className={`flex cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-2.5 text-sm last:border-0 ${sel.includes(t.id) ? "bg-green-100 font-bold" : ""}`}>
+              <input type="checkbox" checked={sel.includes(t.id)} onChange={() => alternar(t.id)} className="h-5 w-5 shrink-0" />
+              <span className="min-w-0">{t.codigo && <span className="mr-1.5 font-mono text-xs text-stone-500">{t.codigo}</span>}{t.nombre}</span>
             </label>
           ))}
           {!visibles.length && <p className="p-3 text-sm text-stone-500">No hay trabajadores{buscar ? " con ese texto" : ""}.</p>}
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-lg border border-stone-200 p-3 sm:grid-cols-3">
-        <Field label="Finca *"><select className="input" required value={fincaEf} onChange={(e) => setFinca(e.target.value)}><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Field>
-        <Field label="Fecha *"><input type="date" className="input" required value={fechaD} max={hoy} onChange={(e) => setFecha(e.target.value)} /></Field>
-        <div className="hidden sm:block" />
-        {NOMBRES_MAYOR.map((m) => {
-          const campos = CAMPOS_HORAS.map((c, i) => ({ c, i })).filter((x) => x.c.mayor === m);
-          if (!campos.length) return null; // un mayor sin tareas aún no admite horas
-          return (
-            <fieldset key={m} className="col-span-full grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-3">
-              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-brand-700">{m}</legend>
-              {campos.map(({ c, i }) => (
-                <Field key={c.etiqueta} label={c.etiqueta}><input inputMode="decimal" className="input" placeholder="0" value={horas[i]} onChange={(e) => setHoras((h) => h.map((x, j) => (j === i ? e.target.value : x)))} /></Field>
-              ))}
-            </fieldset>
-          );
-        })}
-        {iCosecha >= 0 && dec(horas[iCosecha]) > 0 && (
-          <>
-            <Field label="Kg cosechados *"><input inputMode="decimal" className="input" required value={kg} onChange={(e) => setKg(e.target.value)} /></Field>
-            <Field label="Variedad *"><select className="input" required value={variedad} onChange={(e) => setVariedad(e.target.value)}><option value="">Elige…</option>{variedades.map((v) => <option key={v.id} value={v.id}>{v.cultivo}{v.variedad ? ` · ${v.variedad}` : ""}</option>)}</select></Field>
-          </>
-        )}
-        <Field label="🚜 Tractor: horas del día (de la finca, no del personal)"><input inputMode="decimal" className="input" placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Field>
-        <Field label="De ellas, horas extra (por trabajador)"><input inputMode="decimal" className={`input ${extraN > total ? "!border-red-400" : ""}`} placeholder="0" value={extra} onChange={(e) => setExtra(e.target.value)} /></Field>
-        <Field label="Observaciones" wide><input className="input" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Field>
-        <p className={`col-span-full text-sm ${total > MAX_HORAS_DIA ? "font-semibold text-amber-700" : "text-stone-600"}`}>
-          Horas por trabajador: <b>{total.toLocaleString("es-ES", { maximumFractionDigits: 2 })}</b>
-          {extraN > 0 && <> (de ellas {extraN.toLocaleString("es-ES")} extra)</>}
-          {extraN > total && <span className="text-red-600"> · las extra no pueden superar el total</span>}
-          {total > MAX_HORAS_DIA && <> · ⚠ pasa de {MAX_HORAS_DIA} h en un día</>}
-          {sel.length > 0 && total > 0 && <> · total {(total * sel.length).toLocaleString("es-ES", { maximumFractionDigits: 2 })} h</>}
-        </p>
-        <label className="col-span-full flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Registrar igualmente aunque alguien pase de {MAX_HORAS_DIA} h ese día</label>
-      </section>
-
-      {/* Barra fija abajo: el botón y el resumen siempre a mano, aunque el formulario sea largo */}
-      <div className="sticky bottom-2 z-20 flex flex-wrap items-center gap-3 rounded-xl bg-white px-3 py-2 shadow-lg" style={{ border: "2px solid #118a11" }}>
+      {/* Barra fija: botón y resumen */}
+      <div className="fr-horas-barra">
         <button className="btn" disabled={ocupado}>{ocupado ? "Guardando…" : "Añadir"}</button>
-        <span className={`text-sm font-bold ${total > MAX_HORAS_DIA ? "text-amber-700" : "text-stone-700"}`}>
-          {sel.length} marcado{sel.length === 1 ? "" : "s"} · {total.toLocaleString("es-ES", { maximumFractionDigits: 2 })} h cada uno
-          {sel.length > 0 && total > 0 && <> · total {(total * sel.length).toLocaleString("es-ES", { maximumFractionDigits: 2 })} h</>}
+        <span className={`min-w-0 text-sm font-bold ${total > MAX_HORAS_DIA ? "text-amber-700" : "text-stone-700"}`}>
+          {sel.length} marcado{sel.length === 1 ? "" : "s"} · {es(total)} h cada uno{extraN > 0 && <> ({es(extraN)} extra)</>}
+          {sel.length > 0 && total > 0 && <> · total {es(total * sel.length)} h</>}
+          {nombresSel.length > 0 && <span className="block truncate text-xs font-semibold text-stone-600">{nombresSel.join(", ")}</span>}
         </span>
       </div>
 
-      {/* Aviso grande arriba: se ve estés donde estés en el formulario. El de «guardado» se retira solo; el error se queda hasta cerrarlo */}
+      {/* Aviso grande arriba: se ve estés donde estés. El de «guardado» se retira solo; el error se queda hasta cerrarlo */}
       {msg && (
         <div role={msg.error ? "alert" : "status"} className={`fixed inset-x-3 top-3 z-50 mx-auto max-w-xl rounded-xl px-4 py-3 text-sm font-bold shadow-xl ${msg.error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"}`} style={{ border: `2px solid ${msg.error ? "#dc2626" : "#118a11"}` }}>
           <div className="flex items-start gap-3">
@@ -127,7 +149,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   );
 }
 
-/** Registro de horas: solo el formulario. Para revisar, corregir o eliminar lo registrado está «Últimos 7 días»; para totales por trabajador, «Nóminas». */
+/** Registro de horas: solo el formulario. Para revisar, corregir o eliminar lo registrado está «Últimos 7 días»; para consultar y exportar, «Historial». */
 export default function Horas() {
   const { puedeRegistrar } = useAuth();
   const maestros = useCarga(async () => {
@@ -139,11 +161,10 @@ export default function Horas() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <h1 className="text-xl font-semibold">Horas</h1>
+    <div className="fr-horas-pagina mx-auto max-w-6xl">
       {puedeRegistrar ? (
-        <section className="card"><FormHoras trabajadores={maestros.datos?.trab ?? []} variedades={maestros.datos?.vars ?? []} alGuardar={() => {}} /></section>
-      ) : <p className="text-sm text-stone-500">Tu rol solo permite consultar las horas: míralas en «Últimos 7 días».</p>}
+        <section className="card fr-horas-card"><FormHoras trabajadores={maestros.datos?.trab ?? []} variedades={maestros.datos?.vars ?? []} alGuardar={() => {}} /></section>
+      ) : <p className="text-sm text-stone-600">Tu rol solo permite consultar las horas: míralas en «Últimos 7 días».</p>}
     </div>
   );
 }
