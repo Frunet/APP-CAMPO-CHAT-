@@ -54,6 +54,13 @@ textarea.input { border-radius: .9rem; }
 .fr-tabla .fr-fecha { font-size: 1.5rem; font-weight: 800; }
 .fr-lapiz { color: #1b1b1b; padding: .1rem; }
 .fr-lapiz:hover { color: #118a11; }
+.fr-dia { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; min-width: 4.6rem; border: 2px solid #118a11; border-radius: 1rem; background: #fff; padding: .35rem .7rem; font-weight: 800; color: #118a11; line-height: 1.15; text-transform: capitalize; }
+.fr-dia small { font-size: .7rem; font-weight: 700; color: #5b6b5b; text-transform: none; }
+.fr-dia:hover { background: #e8f6e7; }
+.fr-dia-vacio { border-style: dashed; color: #8a8a8a; border-color: #9ca89c; }
+.fr-dia-activo, .fr-dia-activo:hover { background: #118a11; color: #fff; }
+.fr-dia-activo small { color: #d7f0d7; }
+.fr-chip { border: 1px solid #118a11; border-radius: 9999px; background: #e8f6e7; padding: .15rem .6rem; font-size: .8rem; }
 .fr-total td { background: #e8f6e7; font-weight: 800; }
 
 /* Móvil */

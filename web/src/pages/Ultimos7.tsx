@@ -153,6 +153,21 @@ const IconoEditar = () => (
 
 type Fila = { clave: string; nombre: string; codigo: string | null; finca: string; total: number; extra: number; por: Map<string, number>; lineas: Parte[] };
 
+/** Líneas de un trabajador en el día elegido, para modificarlas o eliminarlas (en la tabla y en la tarjeta del móvil). */
+function Detalle({ f, alCambiar, eliminarTodo }: { f: Fila; alCambiar: () => void; eliminarTodo: (f: Fila) => void }) {
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead><tr>{["Código", "Trabajador", "Finca", "Tarea", "Horas", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-stone-100">{f.lineas.map((l) => <FilaParte key={l.id} p={l} alCambiar={alCambiar} />)}</tbody>
+        </table>
+      </div>
+      <button type="button" className="mt-2 text-sm text-red-600 underline" onClick={() => eliminarTodo(f)}>Eliminar todo lo de {f.nombre} este día</button>
+    </>
+  );
+}
+
 /**
  * Revisión de lo registrado en los últimos 7 días, con el aspecto de AppCampo/Frunet: eliges el día y ves una fila por trabajador
  * con sus horas por mayor; el lápiz abre sus líneas para corregirlas o eliminarlas.
@@ -177,7 +192,8 @@ export default function Ultimos7() {
 
   const partes = datos?.partes ?? [], tractor = datos?.tractor ?? [];
   const dias = [...new Set([...partes.map((p) => p.fecha), ...tractor.map((t) => t.fecha)])].sort().reverse();
-  const elegido = dia && dias.includes(dia) ? dia : dias[0] ?? "";
+  const ultimos7 = Array.from({ length: 7 }, (_, i) => iso(new Date(hoy.getTime() - i * 864e5))).reverse(); // del más antiguo al de hoy
+  const elegido = dia && ultimos7.includes(dia) ? dia : dias[0] ?? hasta;
   const trDia = tractor.filter((t) => t.fecha === elegido);
 
   // una fila por trabajador y finca
@@ -193,7 +209,7 @@ export default function Ultimos7() {
   }
   const lista = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   const cols = lista.some((f) => f.por.has(SIN_MAYOR)) ? [...COLUMNAS, { mayor: SIN_MAYOR, pista: "" }] : COLUMNAS;
-  const celda = (v?: number) => (v ? num(v, 2) : "0");
+  const celda = (v?: number) => (v ? <b>{num(v, 2)}</b> : <span className="text-stone-300">0</span>);
   const anchoTabla = 4 + cols.length;
 
   async function eliminarTodo(f: Fila) {
@@ -207,13 +223,21 @@ export default function Ultimos7() {
     <div>
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <label className="block">
+          <div>
             <span className="fr-etiqueta">Selecciona una fecha</span>
-            <select className="fr-select mt-2 block" value={elegido} onChange={(e) => { setDia(e.target.value); setAbierto(null); }}>
-              {!dias.length && <option value="">Días…</option>}
-              {dias.map((d) => <option key={d} value={d}>{DIAS[new Date(d + "T00:00:00").getDay()]} {fecha(d)}</option>)}
-            </select>
-          </label>
+            <div className="mt-2 flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap">
+              {ultimos7.map((d) => {
+                const h = partes.filter((p) => p.fecha === d).reduce((a, p) => a + Number(p.horas_totales ?? 0), 0);
+                const f = new Date(d + "T00:00:00");
+                return (
+                  <button key={d} type="button" className={`fr-dia ${d === elegido ? "fr-dia-activo" : ""} ${!dias.includes(d) ? "fr-dia-vacio" : ""}`} onClick={() => { setDia(d); setAbierto(null); }}>
+                    <span>{DIAS[f.getDay()].slice(0, 3)} {f.getDate()}/{f.getMonth() + 1}</span>
+                    <small>{dias.includes(d) ? `${num(h, 0)} h` : "sin datos"}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {puedeRegistrar && <a href="#/horas" className="fr-boton">Pulse aquí para añadir horas</a>}
         </div>
 
@@ -221,8 +245,12 @@ export default function Ultimos7() {
         {cargando && !datos && <p className="fr-etiqueta">Cargando…</p>}
         {!dias.length && !cargando && <p className="rounded bg-white/90 px-3 py-2 text-sm">No hay registros en los últimos 7 días ({fecha(desde)} – {fecha(hasta)}).</p>}
 
-        {elegido && (
-          <div className="overflow-x-auto">
+        {elegido && !lista.length && !cargando && dias.includes(elegido) && trDia.length === 0 && <p className="rounded bg-white/90 px-3 py-2 text-sm">Sin registros este día.</p>}
+        {elegido && !dias.includes(elegido) && !cargando && <p className="rounded bg-white/90 px-3 py-2 text-sm">No hay nada registrado el {fecha(elegido)}.</p>}
+
+        {elegido && lista.length > 0 && (
+          <>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="fr-tabla w-full">
               <thead>
                 <tr>
@@ -250,28 +278,42 @@ export default function Ultimos7() {
                     {abierto === f.clave && (
                       <tr>
                         <td colSpan={anchoTabla} className="!bg-white/95 !p-3 text-left">
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead><tr>{["Código", "Trabajador", "Finca", "Tarea", "Horas", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
-                              <tbody className="divide-y divide-stone-100">{f.lineas.map((l) => <FilaParte key={l.id} p={l} alCambiar={recargar} />)}</tbody>
-                            </table>
-                          </div>
-                          <button type="button" className="mt-2 text-sm text-red-600 underline" onClick={() => eliminarTodo(f)}>Eliminar todo lo de {f.nombre} este día</button>
+                          <Detalle f={f} alCambiar={recargar} eliminarTodo={eliminarTodo} />
                         </td>
                       </tr>
                     )}
                   </Fragment>
                 ))}
-                {!lista.length && !cargando && <tr><td colSpan={anchoTabla}>Este día solo tiene horas de tractor.</td></tr>}
-                {lista.length > 0 && (
-                  <tr className="fr-total">
-                    <td /><td className="text-left">Total del día</td><td>{num(lista.reduce((a, f) => a + f.total, 0), 2)}</td><td />
-                    {cols.map((c) => <td key={c.mayor}>{celda(lista.reduce((a, f) => a + (f.por.get(c.mayor) ?? 0), 0))}</td>)}
-                  </tr>
-                )}
+                <tr className="fr-total">
+                  <td /><td className="text-left">Total del día</td><td>{num(lista.reduce((a, f) => a + f.total, 0), 2)}</td><td />
+                  {cols.map((c) => <td key={c.mayor}>{celda(lista.reduce((a, f) => a + (f.por.get(c.mayor) ?? 0), 0))}</td>)}
+                </tr>
               </tbody>
             </table>
           </div>
+
+          {/* Móvil: una tarjeta por trabajador, con solo los mayores en los que tiene horas */}
+          <div className="space-y-3 sm:hidden">
+            {lista.map((f) => (
+              <div key={f.clave} className="card">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-extrabold">{f.nombre}{f.codigo && <span className="font-semibold text-stone-500"> ({f.codigo})</span>}</p>
+                    <p className="text-sm text-stone-600">{f.finca} · <b className="text-base text-stone-900">{num(f.total, 2)} h</b>{f.extra > 0 && <span className="text-amber-700"> ({num(f.extra, 2)} extra)</span>}</p>
+                  </div>
+                  {puedeRegistrar && <button type="button" aria-label={`Modificar o eliminar ${f.nombre}`} className="fr-lapiz" onClick={() => setAbierto(abierto === f.clave ? null : f.clave)}><IconoEditar /></button>}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {cols.filter((c) => f.por.get(c.mayor)).map((c) => <span key={c.mayor} className="fr-chip">{c.mayor} <b>{num(f.por.get(c.mayor), 2)}</b></span>)}
+                </div>
+                {abierto === f.clave && <div className="mt-3 border-t border-stone-200 pt-3"><Detalle f={f} alCambiar={recargar} eliminarTodo={eliminarTodo} /></div>}
+              </div>
+            ))}
+            <div className="card flex items-center justify-between font-extrabold" style={{ background: "#e8f6e7" }}>
+              <span>Total del día</span><span>{num(lista.reduce((a, f) => a + f.total, 0), 2)} h</span>
+            </div>
+          </div>
+          </>
         )}
 
         {trDia.length > 0 && (

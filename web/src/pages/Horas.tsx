@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth";
 import { db } from "../supabase";
 import { Field, useCarga } from "../ui";
@@ -27,6 +27,11 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [forzar, setForzar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
+  useEffect(() => {
+    if (!msg?.ok) return;
+    const t = setTimeout(() => setMsg(null), 7000);
+    return () => clearTimeout(t);
+  }, [msg]);
   const fincaEf = finca || (fincas.length === 1 ? fincas[0].id : "");
   const total = horas.reduce((a, h) => a + dec(h), 0), extraN = dec(extra);
 
@@ -100,11 +105,24 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
         <label className="col-span-full flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Registrar igualmente aunque alguien pase de {MAX_HORAS_DIA} h ese día</label>
       </section>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Barra fija abajo: el botón y el resumen siempre a mano, aunque el formulario sea largo */}
+      <div className="sticky bottom-2 z-20 flex flex-wrap items-center gap-3 rounded-xl bg-white px-3 py-2 shadow-lg" style={{ border: "2px solid #118a11" }}>
         <button className="btn" disabled={ocupado}>{ocupado ? "Guardando…" : "Añadir"}</button>
-        {msg?.error && <span role="alert" className="text-sm text-red-600">{msg.error}</span>}
-        {msg?.ok && <span role="status" className="text-sm text-green-700">{msg.ok}</span>}
+        <span className={`text-sm font-bold ${total > MAX_HORAS_DIA ? "text-amber-700" : "text-stone-700"}`}>
+          {sel.length} marcado{sel.length === 1 ? "" : "s"} · {total.toLocaleString("es-ES", { maximumFractionDigits: 2 })} h cada uno
+          {sel.length > 0 && total > 0 && <> · total {(total * sel.length).toLocaleString("es-ES", { maximumFractionDigits: 2 })} h</>}
+        </span>
       </div>
+
+      {/* Aviso grande arriba: se ve estés donde estés en el formulario. El de «guardado» se retira solo; el error se queda hasta cerrarlo */}
+      {msg && (
+        <div role={msg.error ? "alert" : "status"} className={`fixed inset-x-3 top-3 z-50 mx-auto max-w-xl rounded-xl px-4 py-3 text-sm font-bold shadow-xl ${msg.error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"}`} style={{ border: `2px solid ${msg.error ? "#dc2626" : "#118a11"}` }}>
+          <div className="flex items-start gap-3">
+            <span className="flex-1">{msg.error ? "⚠ " : "✓ "}{msg.error ?? msg.ok}</span>
+            <button type="button" aria-label="Cerrar aviso" className="text-lg leading-none" onClick={() => setMsg(null)}>✕</button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
