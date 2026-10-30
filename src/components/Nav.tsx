@@ -6,13 +6,14 @@ import { createClient } from "@/lib/supabase/browser";
 
 const todos: { href: string; label: string; icon: string; soloAdmin?: boolean; soloGestion?: boolean }[] = [
   { href: "/", label: "Inicio", icon: "🏠" },
+  { href: "/horas", label: "Horas", icon: "⏱️" },
   { href: "/chat", label: "Chat inteligente", icon: "💬" },
   { href: "/nominas", label: "Nóminas", icon: "🧾", soloGestion: true },
   { href: "/resultados", label: "Cuenta de Resultados", icon: "📈" },
   { href: "/calendario", label: "Calendario", icon: "📅" },
   { href: "/maestros", label: "Maestros", icon: "🗂️", soloAdmin: true },
 ];
-const movil = ["/", "/chat", "/calendario", "/resultados"];
+const movil = ["/", "/horas", "/chat", "/calendario"];
 
 
 export default function Nav({ nombre, rol }: { nombre: string; rol: string }) {

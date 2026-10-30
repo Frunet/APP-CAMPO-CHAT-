@@ -1,4 +1,5 @@
 "use server";
+import { MAX_HORAS_DIA, TAREAS_HORAS } from "@/lib/horas";
 import { buscarTrabajador } from "@/lib/documentos/nombres";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -715,6 +716,50 @@ export async function importarHoras(fd: FormData): Promise<Res> {
     if (sinFinca.size) partes.push(`pendientes de elegir finca: ${[...sinFinca].join(", ")}`);
     if (fallos.some(Boolean)) partes.push(`con errores: ${fallos.filter(Boolean).join(" | ")}`);
     return partes.join(". ") + ".";
+  });
+}
+
+/**
+ * Registro de horas (como el parte de AppCampo): varios trabajadores, una finca, una fecha y horas por tarea. Crea un parte por trabajador y tarea.
+ * Avisa (y no guarda) si alguien pasaría de 12 h ese día, sumando lo ya registrado, salvo que se marque «registrar igualmente».
+ */
+export async function registrarHoras(fd: FormData): Promise<Res> {
+  return run(["/horas", "/chat", "/resultados", "/nominas", "/"], async ({ db }) => {
+    const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
+    const fecha = fechaZ.parse(s(fd, "fecha"));
+    const ids = z.array(z.string().uuid()).min(1, "Elige al menos un trabajador").max(100).parse(fd.getAll("trabajador").map(String));
+    const lineas: { tarea: string; h: number }[] = [];
+    for (let i = 0; i < TAREAS_HORAS.length; i++) {
+      const h = n(fd, `h${i}`);
+      if (h == null || h === 0) continue;
+      if (Number.isNaN(h) || h < 0 || h > 24) throw new z.ZodError([{ code: "custom", path: [], message: `Horas no válidas en «${TAREAS_HORAS[i]}»` }]);
+      lineas.push({ tarea: TAREAS_HORAS[i], h });
+    }
+    if (!lineas.length) throw new z.ZodError([{ code: "custom", path: [], message: "Indica las horas de al menos una tarea" }]);
+    const nuevas = lineas.reduce((a, l) => a + l.h, 0);
+    if (nuevas > 24) throw new z.ZodError([{ code: "custom", path: [], message: "Un trabajador no puede tener más de 24 h en un día" }]);
+    const actividad = s(fd, "actividad")?.slice(0, 500) ?? null;
+
+    const { data: previos } = await db.from("partes_trabajo").select("trabajador_id,horas_por_trabajador,num_trabajadores").eq("fecha", fecha).in("trabajador_id", ids);
+    const ya = new Map<string, number>();
+    for (const p of (previos ?? []) as any[]) ya.set(p.trabajador_id, (ya.get(p.trabajador_id) ?? 0) + Number(p.horas_por_trabajador) * (Number(p.num_trabajadores) || 1));
+    const pasan = ids.filter((id) => (ya.get(id) ?? 0) + nuevas > MAX_HORAS_DIA);
+    if (pasan.length && fd.get("forzar") !== "on") {
+      const { data: nom } = await db.from("trabajadores").select("id,codigo,nombre").in("id", pasan);
+      const det = ((nom ?? []) as any[]).map((t) => `${t.codigo ? t.codigo + " " : ""}${t.nombre} (${((ya.get(t.id) ?? 0) + nuevas).toLocaleString("es-ES")} h)`).join(", ");
+      throw { message: `Aviso: pasarían de ${MAX_HORAS_DIA} h ese día: ${det}. No se ha guardado nada; revisa las horas o marca «Registrar igualmente».` };
+    }
+
+    let hechos = 0, duplicados = 0;
+    const fallos: string[] = [];
+    for (const tid of ids) for (const l of lineas) {
+      const { error } = await db.from("partes_trabajo").insert({
+        fecha, finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, tipo_trabajo: l.tarea, actividad, origen: "manual",
+      });
+      if (!error) hechos++; else if (error.code === "23505") duplicados++; else if (fallos.length < 2) fallos.push(msgError(error));
+    }
+    if (!hechos && !duplicados) throw { message: fallos[0] ?? "No se pudo guardar." };
+    return `${hechos} parte(s) guardado(s) para ${ids.length} trabajador(es)` + (duplicados ? `; ${duplicados} ya existían` : "") + (fallos.length ? `; con errores: ${fallos.join(" | ")}` : "") + (pasan.length ? ` (aviso: ${pasan.length} pasan de ${MAX_HORAS_DIA} h)` : "") + ".";
   });
 }
 
