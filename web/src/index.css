@@ -55,3 +55,19 @@ textarea.input { border-radius: .9rem; }
 .fr-lapiz { color: #1b1b1b; padding: .1rem; }
 .fr-lapiz:hover { color: #118a11; }
 .fr-total td { background: #e8f6e7; font-weight: 800; }
+
+/* Móvil */
+@media (max-width: 640px) {
+  .input, .fr-select, select, textarea { font-size: 16px; } /* evita el zoom automático de iOS al pulsar un campo */
+  .fr-cabecera { padding-top: env(safe-area-inset-top); }
+  .fr-marca small, .fr-usuario-texto { display: none; }
+  .fr-marca { order: 1; }
+  .fr-usuario { order: 2; }
+  .fr-nav { order: 3; }
+  .fr-nav { width: 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: .15rem; -webkit-overflow-scrolling: touch; }
+  .fr-nav .fr-pestana { white-space: nowrap; padding: .4rem .9rem; }
+  main { padding-left: .6rem !important; padding-right: .6rem !important; padding-bottom: calc(1.25rem + env(safe-area-inset-bottom)) !important; }
+  .card { padding: .8rem; }
+  .btn, .btn-ghost { min-height: 2.75rem; }
+  .fr-tabla th, .fr-tabla td { padding: .45rem .4rem; font-size: .85rem; }
+}

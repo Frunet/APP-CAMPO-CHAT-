@@ -56,7 +56,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
         <input className="input mb-2" placeholder="Buscar por código o nombre…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
         <div className="max-h-56 overflow-y-auto rounded-lg border border-stone-200">
           {visibles.map((t) => (
-            <label key={t.id} className="flex cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-2 text-sm last:border-0">
+            <label key={t.id} className="flex cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-3 text-sm last:border-0">
               <input type="checkbox" checked={sel.includes(t.id)} onChange={() => alternar(t.id)} className="h-5 w-5" />
               {t.codigo && <span className="font-mono text-xs text-stone-500">{t.codigo}</span>}<span>{t.nombre}</span>
             </label>
