@@ -8,23 +8,26 @@ type Ctx = Awaited<ReturnType<typeof cargarContexto>>;
 const eur = (n: number | null | undefined) => (n == null ? "—" : `${Number(n).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
 
 /** Campos de tarifa compartidos por equipos y trabajadores */
-function Tarifas({ v }: { v?: any }) {
+function Tarifas({ v, desde }: { v?: any; desde?: boolean }) {
   return (
     <>
       <Field label="€/hora normal"><input name="coste_hora" inputMode="decimal" className="input" defaultValue={v?.coste_hora ?? ""} /></Field>
       <Field label="€/hora extra"><input name="coste_hora_extra" inputMode="decimal" className="input" defaultValue={v?.coste_hora_extra ?? ""} /></Field>
       <Field label="€/hora festivo"><input name="coste_hora_festivo" inputMode="decimal" className="input" defaultValue={v?.coste_hora_festivo ?? ""} /></Field>
+      {desde && <Field label="Tarifa válida desde (vacío = hoy)"><input type="date" name="coste_desde" className="input" /></Field>}
       <Field label="Condiciones acordadas (notas)" wide><input name="condiciones" className="input" defaultValue={v?.condiciones ?? ""} placeholder="Ej.: jornal pactado, plus de transporte…" /></Field>
     </>
   );
 }
 
 export default async function SeccionPersonal({ ctx }: { ctx: Ctx }) {
-  const [{ data: equipos }, { data: trabajadores }, { data: festivos }] = await Promise.all([
+  const [{ data: equipos }, { data: trabajadores }, { data: festivos }, { data: historico }] = await Promise.all([
     ctx.db.from("equipos").select("*, fincas(nombre)").order("nombre"),
     ctx.db.from("trabajadores").select("*, fincas(nombre)").order("nombre"),
     ctx.db.from("festivos").select("id,fecha,nombre,fincas(nombre)").order("fecha", { ascending: false }),
+    ctx.db.from("trabajadores_coste").select("trabajador_id,desde,coste_hora,coste_hora_extra,coste_hora_festivo").order("desde", { ascending: false }),
   ]);
+  const histDe = (id: string) => ((historico ?? []) as any[]).filter((h) => h.trabajador_id === id);
   const selFinca = (
     <Field label="Finca *"><select name="finca_id" className="input" required><option value="">Elige…</option>{ctx.fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Field>
   );
@@ -32,7 +35,8 @@ export default async function SeccionPersonal({ ctx }: { ctx: Ctx }) {
   const ficha = (r: any, tipo: "equipo" | "trabajador") => (
     <details key={r.id} className="rounded-lg border border-stone-200 px-3 py-2">
       <summary className="cursor-pointer text-sm">
-        <b>{r.nombre}</b> <span className="text-stone-500">· {r.fincas?.nombre}</span> · normal {eur(r.coste_hora)} · extra {eur(r.coste_hora_extra)} · festivo {eur(r.coste_hora_festivo)}
+        {tipo === "trabajador" && <span className="font-mono text-xs text-stone-500">{r.codigo ?? "sin código"} · </span>}
+        <b>{r.nombre}</b> <span className="text-stone-500">· {r.fincas?.nombre ?? "todas las fincas"}</span> · normal {eur(r.coste_hora)} · extra {eur(r.coste_hora_extra)} · festivo {eur(r.coste_hora_festivo)}
         {r.condiciones && <span className="text-stone-500"> · {r.condiciones}</span>}
         {!r.activo && <span className="text-red-600"> · inactivo</span>}
       </summary>
@@ -40,9 +44,26 @@ export default async function SeccionPersonal({ ctx }: { ctx: Ctx }) {
         <ActionForm action={tipo === "equipo" ? actualizarEquipo : actualizarTrabajador} label="Guardar" reset={false} className="grid gap-3 sm:grid-cols-4">
           <input type="hidden" name="id" value={r.id} />
           <Field label="Nombre *"><input name="nombre" className="input" required defaultValue={r.nombre} /></Field>
-          <Tarifas v={r} />
+          {tipo === "trabajador" && (
+            <>
+              <Field label="Código *"><input name="codigo" className="input" required maxLength={30} defaultValue={r.codigo ?? ""} /></Field>
+              <Field label="Teléfono"><input name="telefono" type="tel" className="input" defaultValue={r.telefono ?? ""} /></Field>
+              <Field label="Observaciones" wide><input name="observaciones" className="input" defaultValue={r.observaciones ?? ""} /></Field>
+            </>
+          )}
+          <Tarifas v={r} desde={tipo === "trabajador"} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="activo" defaultChecked={r.activo} /> Activo</label>
         </ActionForm>
+        {tipo === "trabajador" && histDe(r.id).length > 0 && (
+          <div className="mt-3 text-xs text-stone-600">
+            <p className="font-medium">Histórico de tarifas (cada parte usa la vigente en su fecha)</p>
+            <ul className="mt-1 space-y-0.5">
+              {histDe(r.id).map((h: any) => (
+                <li key={h.desde}>desde {h.desde === "2000-01-01" ? "el principio" : fecha(h.desde)}: normal {eur(h.coste_hora)} · extra {eur(h.coste_hora_extra)} · festivo {eur(h.coste_hora_festivo)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </details>
   );
@@ -56,7 +77,7 @@ export default async function SeccionPersonal({ ctx }: { ctx: Ctx }) {
           <li><b>Resto de días</b>: horas normales × tarifa normal + horas extra × tarifa extra.</li>
           <li>Un <b>trabajador con condiciones acordadas</b> usa sus propias tarifas, y su parte se registra de forma individual. Una <b>cuadrilla</b> usa las tarifas de su equipo.</li>
           <li>Si falta una tarifa necesaria, el parte queda «sin tarifa»: el coste no se estima.</li>
-          <li>Cambiar una tarifa no recalcula los partes ya registrados: conservan la que se aplicó.</li>
+          <li>Cambiar una tarifa no recalcula los partes ya registrados. Cada cambio queda en el histórico del trabajador con su fecha de inicio, y un parte nuevo usa la tarifa vigente en la fecha del parte.</li>
         </ul>
       </section>
 
@@ -84,9 +105,12 @@ export default async function SeccionPersonal({ ctx }: { ctx: Ctx }) {
           <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Nuevo trabajador</summary>
           <div className="mt-2">
             <ActionForm action={crearTrabajador} label="Crear trabajador" className="grid gap-3 sm:grid-cols-4">
-              <Field label="Nombre *"><input name="nombre" className="input" required /></Field>
+              <Field label="Código * (único)"><input name="codigo" className="input" required maxLength={30} /></Field>
+              <Field label="Nombre y apellidos *"><input name="nombre" className="input" required /></Field>
               {selFinca}
-              <Tarifas />
+              <Field label="Teléfono"><input name="telefono" type="tel" className="input" /></Field>
+              <Field label="Observaciones" wide><input name="observaciones" className="input" /></Field>
+              <Tarifas desde />
             </ActionForm>
           </div>
         </details>

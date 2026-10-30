@@ -35,16 +35,22 @@ export async function consultarMaestros(input: Record<string, any>, ctx: Ctx) {
   const veTarifas = perfil?.rol === "administrador" || perfil?.rol === "responsable";
   const buscar = String(input.buscar ?? "").trim().toLowerCase();
   const bajas = input.incluir_bajas === true;
-  const filtra = <T extends { nombre?: string | null }>(l: T[]) => (buscar ? l.filter((x) => (x.nombre ?? "").toLowerCase().includes(buscar)) : l);
+  const filtra = <T extends { nombre?: string | null; codigo?: string | null }>(l: T[]) => (buscar ? l.filter((x) => `${x.codigo ?? ""} ${x.nombre ?? ""}`.toLowerCase().includes(buscar)) : l);
 
   if (entidad === "trabajadores") {
-    const { data, error } = await db.from("trabajadores").select("nombre,activo,coste_hora,coste_hora_extra,coste_hora_festivo,fincas(nombre)").order("nombre").limit(2000);
+    const { data, error } = await db.from("trabajadores").select("id,nombre,codigo,telefono,observaciones,activo,coste_hora,coste_hora_extra,coste_hora_festivo,fincas(nombre)").order("nombre").limit(2000);
     if (error) return { error: error.message };
     const l = filtra((data ?? []) as any[]).filter((t) => bajas || t.activo);
+    const hist: Record<string, any[]> = {};
+    if (veTarifas && buscar && l.length > 0 && l.length <= 10) {
+      const { data: h } = await db.from("trabajadores_coste").select("trabajador_id,desde,coste_hora,coste_hora_extra,coste_hora_festivo").in("trabajador_id", l.map((t) => t.id)).order("desde", { ascending: false });
+      for (const x of (h ?? []) as any[]) (hist[x.trabajador_id] ??= []).push({ desde: x.desde === "2000-01-01" ? "el principio" : x.desde, normal: r2(x.coste_hora), extra: r2(x.coste_hora_extra), festivo: r2(x.coste_hora_festivo) });
+    }
     return {
       total: l.length, truncado: l.length > TOPE,
       trabajadores: l.slice(0, TOPE).map((t) => ({
-        nombre: t.nombre, finca: t.fincas?.nombre ?? "todas las fincas", ...(bajas ? { activo: t.activo } : {}),
+        codigo: t.codigo, nombre: t.nombre, telefono: t.telefono, observaciones: t.observaciones,
+        ...(hist[t.id] ? { historico_tarifas: hist[t.id] } : {}), finca: t.fincas?.nombre ?? "todas las fincas", ...(bajas ? { activo: t.activo } : {}),
         ...(veTarifas ? { tarifa_normal: r2(t.coste_hora), tarifa_extra: r2(t.coste_hora_extra), tarifa_festivo: r2(t.coste_hora_festivo) } : {}),
       })),
       nota: veTarifas ? "Una tarifa null significa que aún no tiene tarifa puesta." : "Las tarifas no son visibles con tu rol.",

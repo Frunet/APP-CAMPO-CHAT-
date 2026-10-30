@@ -430,11 +430,22 @@ function datosPersonal(fd: FormData) {
   };
 }
 
+/** Ficha del trabajador: código único, teléfono, observaciones y desde cuándo vale la tarifa indicada (hoy si se deja vacío). */
+function fichaTrabajador(fd: FormData) {
+  const desde = s(fd, "coste_desde");
+  return {
+    codigo: z.string().trim().min(1, "Falta el código").max(30, "El código es demasiado largo").parse(s(fd, "codigo") ?? ""),
+    telefono: s(fd, "telefono"),
+    observaciones: s(fd, "observaciones"),
+    ...(desde ? { coste_desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de inicio de la tarifa no válida").parse(desde) } : {}),
+  };
+}
+
 export async function crearTrabajador(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {
     await exigirAdmin(db);
     const finca_id = z.string().uuid("Elige la finca").parse(s(fd, "finca_id"));
-    const { error } = await db.from("trabajadores").insert({ ...datosPersonal(fd), finca_id });
+    const { error } = await db.from("trabajadores").insert({ ...datosPersonal(fd), ...fichaTrabajador(fd), finca_id });
     check(error);
     return "Trabajador creado.";
   });
@@ -444,7 +455,7 @@ export async function actualizarTrabajador(fd: FormData): Promise<Res> {
   return run(RUTAS_MAESTROS, async ({ db }) => {
     await exigirAdmin(db);
     const id = z.string().uuid().parse(s(fd, "id"));
-    const { data, error } = await db.from("trabajadores").update({ ...datosPersonal(fd), activo: fd.get("activo") === "on" }).eq("id", id).select("id");
+    const { data, error } = await db.from("trabajadores").update({ ...datosPersonal(fd), ...fichaTrabajador(fd), activo: fd.get("activo") === "on" }).eq("id", id).select("id");
     check(error);
     if (!data?.length) throw { message: "No se pudo actualizar el trabajador." };
     return "Trabajador actualizado. Los partes ya registrados conservan la tarifa con la que se calcularon.";

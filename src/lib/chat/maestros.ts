@@ -17,12 +17,12 @@ type Espec = {
   ambito: "finca" | "finca_opcional" | "parcela" | "global"; claves: string[];
   baja?: { campo: string; off: unknown; on: unknown }; personal?: boolean;
 };
-const TARIFAS = ["coste_hora", "coste_hora_extra", "coste_hora_festivo", "condiciones"];
+const TARIFAS = ["coste_hora", "coste_hora_extra", "coste_hora_festivo", "condiciones", "coste_desde"];
 const CATS = "insumos,suministros,consumibles,mano_obra,reparaciones,otros_gastos,personal_fijo,servicios_profesionales,instalaciones,gastos_generales,gastos_financieros";
 
 const ESPECS: Record<string, Espec> = {
-  trabajador: { tabla: "trabajadores", etiqueta: "trabajador", ambito: "finca_opcional", claves: ["nombre"], oblig: ["nombre"], personal: true, baja: { campo: "activo", off: false, on: true },
-    campos: { nombre: "s", coste_hora: "n", coste_hora_extra: "n", coste_hora_festivo: "n", condiciones: "s" } },
+  trabajador: { tabla: "trabajadores", etiqueta: "trabajador", ambito: "finca_opcional", claves: ["nombre", "codigo"], oblig: ["nombre", "codigo"], personal: true, baja: { campo: "activo", off: false, on: true },
+    campos: { nombre: "s", codigo: "s", telefono: "s", observaciones: "s", coste_hora: "n", coste_hora_extra: "n", coste_hora_festivo: "n", coste_desde: "f", condiciones: "s" } },
   equipo: { tabla: "equipos", etiqueta: "equipo (cuadrilla)", ambito: "finca", claves: ["nombre"], oblig: ["nombre"], personal: true, baja: { campo: "activo", off: false, on: true },
     campos: { nombre: "s", coste_hora: "n", coste_hora_extra: "n", coste_hora_festivo: "n", condiciones: "s" } },
   finca: { tabla: "fincas", etiqueta: "finca", ambito: "global", claves: ["codigo", "nombre"], oblig: ["codigo", "nombre"], baja: { campo: "activa", off: false, on: true },
@@ -73,6 +73,7 @@ export const herramientasMaestros: Anthropic.Tool[] = [
             estado: { type: "string", enum: ["activa", "en_preparacion", "en_descanso", "inactiva"] },
             coste_hora: { type: "number", description: "€/h normal" }, coste_hora_extra: { type: "number", description: "€/h extra" }, coste_hora_festivo: { type: "number", description: "€/h festivo" },
             condiciones: { type: "string", description: "Condiciones acordadas (texto libre)" },
+            telefono: { type: "string", description: "Teléfono (trabajador)" }, coste_desde: { type: "string", description: "YYYY-MM-DD desde cuándo vale la tarifa nueva (trabajador; si no se dice, desde hoy)" },
             fecha: { type: "string", description: "YYYY-MM-DD (festivo)" }, fecha_inicio: { type: "string", description: "YYYY-MM-DD (campaña)" }, fecha_fin: { type: "string", description: "YYYY-MM-DD (campaña)" },
             nif: { type: "string" }, categoria_defecto: { type: "string", description: "Concepto de la cuenta de resultados por defecto del proveedor" },
             tipo: { type: "string", description: "Tipo de identificador: alias, catastro, direccion, cups, contador, matricula, otro" }, valor: { type: "string", description: "Valor del identificador" },
@@ -153,6 +154,10 @@ export async function proponerMaestro(i: any, ctx: Ctx): Promise<unknown> {
     if (falta.length) return { error: `Faltan datos obligatorios: ${falta.join(", ")}. Pregunta al usuario.` };
     const nombreCampo = e.claves[0];
     // duplicados que la base de datos no impide
+    if (e.tabla === "trabajadores" && v.codigo) {
+      const { data: cod } = await ctx.db.from("trabajadores").select("nombre").ilike("codigo", String(v.codigo)).limit(1);
+      if (cod?.length) return { error: `El código «${v.codigo}» ya lo tiene ${cod[0].nombre}. Los códigos no se repiten: pregunta otro.` };
+    }
     if (e.tabla === "trabajadores" || e.tabla === "cultivos_maestro") {
       let q = ctx.db.from(e.tabla).select("id").ilike(nombreCampo, String(v[nombreCampo]));
       if (e.tabla === "trabajadores") q = fincaId ? q.eq("finca_id", fincaId) : q.is("finca_id", null);

@@ -43,11 +43,12 @@ export async function resolver(db: Db, fincaTxt?: string, parcelaTxt?: string, l
 export async function resolverPersonal(db: Db, fincaId: string | undefined, equipoTxt?: string, trabajadorTxt?: string): Promise<{ equipo_id?: string; trabajador_id?: string; nombre?: string } | { error: string }> {
   if (equipoTxt && trabajadorTxt) return { error: "Indica un equipo o un trabajador, no ambos en el mismo parte." };
   const buscar = async (tabla: "equipos" | "trabajadores", txt: string) => {
-    let qb = db.from(tabla).select("id,nombre,finca_id").eq("activo", true);
+    let qb = db.from(tabla).select("*").eq("activo", true);
     if (fincaId) qb = tabla === "trabajadores" ? qb.or(`finca_id.eq.${fincaId},finca_id.is.null`) : qb.eq("finca_id", fincaId); // un trabajador sin finca vale para todas
     const { data } = await qb;
     const q = txt.trim().toLowerCase();
-    const m = (data ?? []).filter((x: any) => x.nombre.toLowerCase().includes(q));
+    const porCodigo = (data ?? []).filter((x: any) => x.codigo && String(x.codigo).toLowerCase() === q);
+    const m = porCodigo.length === 1 ? porCodigo : (data ?? []).filter((x: any) => x.nombre.toLowerCase().includes(q));
     if (m.length === 0) return { error: `No hay ${tabla === "equipos" ? "ningún equipo" : "ningún trabajador"} «${txt}» en esa finca. Pregunta o usa solo el número de personas.` };
     if (m.length > 1) return { error: `«${txt}» es ambiguo: ${m.map((x: any) => x.nombre).join(", ")}. Pregunta cuál.` };
     return { id: m[0].id as string, nombre: m[0].nombre as string };

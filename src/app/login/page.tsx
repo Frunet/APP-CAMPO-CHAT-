@@ -28,7 +28,7 @@ export default function Login() {
       <form onSubmit={entrar} className="card w-full max-w-sm space-y-4">
         <div>
           <h1 className="text-xl font-semibold text-brand-700">Control de Fincas</h1>
-          <p className="text-sm text-stone-500">Accede con tu cuenta</p>
+          <p className="text-sm text-stone-500">Solo para personal autorizado</p>
         </div>
         <input className="input" type="email" placeholder="Correo" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
         <input className="input" type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
