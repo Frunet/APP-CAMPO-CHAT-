@@ -8,9 +8,10 @@ import Nominas from "./pages/Nominas";
 import Maestros from "./pages/Maestros";
 import Ultimos7 from "./pages/Ultimos7";
 import Historial from "./pages/Historial";
+import Calendario from "./pages/Calendario";
 
 const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" }[] = [
-  { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/historial", texto: "📚 Historial", solo: "hist" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
+  { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/calendario", texto: "🗓️ Calendario" }, { to: "/historial", texto: "📚 Historial", solo: "hist" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
 ];
 
 /** Guarda la altura de la cabecera (--cab-h) para que Horas ocupe justo el resto de la pantalla. Función estable: se ejecuta una sola vez. */
@@ -28,7 +29,7 @@ function Shell() {
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : Horas;
+  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : Horas;
   return (
     <div className="fr-fondo min-h-screen" style={fondo}>
       <header ref={medirCabecera} className="fr-cabecera sticky top-0 z-10">

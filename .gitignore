@@ -18,3 +18,4 @@ web/dist
 # Ficheros con contraseñas: nunca al repositorio
 CONTRASE*AS*.xlsx
 *.xlsx
+.env.chatgpt

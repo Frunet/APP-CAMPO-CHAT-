@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { db } from "../../supabase";
 import { AccionForm } from "../../forms";
 import { Field, useCarga } from "../../ui";
 import { fecha } from "../../lib/format";
-import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crearTrabajador, eliminarFestivo } from "../../lib/maestros";
+import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crearTrabajador, eliminarFestivo, eliminarTrabajador } from "../../lib/maestros";
+import { msgError } from "../../ui";
 
 const eur = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
 
@@ -16,6 +18,35 @@ function Tarifas({ v, desde }: { v?: any; desde?: boolean }) {
       {desde && <Field label="Tarifa válida desde (vacío = hoy)"><input type="date" name="coste_desde" className="input" /></Field>}
       <Field label="Condiciones acordadas (notas)" wide><input name="condiciones" className="input" defaultValue={v?.condiciones ?? ""} placeholder="Ej.: jornal pactado, plus de transporte…" /></Field>
     </>
+  );
+}
+
+/** Eliminar un trabajador: pide confirmación y avisa de cuántas horas registradas tiene (se conservan a su nombre, sin ficha). */
+function EliminarTrabajador({ r, onOk }: { r: any; onOk: () => void }) {
+  const [ocupado, setOcupado] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  async function eliminar() {
+    setMsg(null);
+    const { count } = await db.from("partes_trabajo").select("id", { count: "exact", head: true }).eq("trabajador_id", r.id);
+    const n = count ?? 0;
+    const quien = `${r.codigo ? `${r.codigo} · ` : ""}${r.nombre}`;
+    const texto = n
+      ? `¿Eliminar a ${quien}?
+
+Tiene ${n} registro(s) de horas. Se conservan, con sus horas y costes, a su nombre, pero ya sin ficha de trabajador.
+
+Si solo quieres que deje de salir en las listas, desmarca «Activo» en lugar de eliminarlo.`
+      : `¿Eliminar a ${quien}? No tiene horas registradas.`;
+    if (!window.confirm(texto)) return;
+    setOcupado(true);
+    try { await eliminarTrabajador(r.id); onOk(); } catch (e) { setMsg(msgError(e as { message?: string })); }
+    setOcupado(false);
+  }
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3">
+      <button type="button" className="btn-ghost !border-red-300 !text-red-700" disabled={ocupado} onClick={eliminar}>{ocupado ? "Eliminando…" : "🗑 Eliminar trabajador"}</button>
+      {msg && <span role="alert" className="text-sm text-red-600">{msg}</span>}
+    </div>
   );
 }
 
@@ -58,6 +89,7 @@ export default function Personal() {
           <Tarifas v={r} desde={tipo === "trabajador"} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="activo" defaultChecked={r.activo} /> Activo</label>
         </AccionForm>
+        {tipo === "trabajador" && <EliminarTrabajador r={r} onOk={recargar} />}
         {tipo === "trabajador" && histDe(r.id).length > 0 && (
           <div className="mt-3 text-xs text-stone-600">
             <p className="font-medium">Histórico de tarifas (cada parte usa la vigente en su fecha)</p>

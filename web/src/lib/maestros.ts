@@ -142,3 +142,10 @@ export async function actualizarUsuario(fd: FormData, yo: string) {
   return "Usuario actualizado.";
 }
 export { n };
+
+/** Elimina un trabajador (la base de datos lo hace en bloque). Sus partes de horas se conservan a su nombre, sin ficha; devuelve cuántos. */
+export async function eliminarTrabajador(id: string): Promise<number> {
+  const { data, error } = await db.rpc("eliminar_trabajador", { p_id: uuid(id, "Trabajador no válido") });
+  check(error);
+  return Number(data ?? 0);
+}
