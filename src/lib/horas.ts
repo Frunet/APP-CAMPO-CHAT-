@@ -11,7 +11,9 @@ export const TAREAS: readonly TareaDef[] = [
   { nombre: "Reparaciones", subtipos: ["Maquinaria", "Riego"] },
   { nombre: "Poda" },
   { nombre: "Obra" },
+  { nombre: "Tractor" },
   { nombre: "Cosecha", cosecha: true },
+  { nombre: "Otros" },
 ];
 export const TAREAS_HORAS = TAREAS.map((t) => t.nombre);
 export const MAX_HORAS_DIA = 12;
