@@ -29,7 +29,7 @@ const textoDia = (s: string) => { const d = new Date(s + "T00:00:00"); return `$
 
 /** Alta y edición de una tarea. */
 function TareaForm({ inicial, fechaInicial, usuarios, onGuardado, onCancelar }: { inicial?: Tarea; fechaInicial?: string; usuarios: Usuario[]; onGuardado: () => void; onCancelar: () => void }) {
-  const { fincas } = useAuth();
+  const { fincas, esAdmin, perfil } = useAuth();
   const [titulo, setTitulo] = useState(inicial?.titulo ?? "");
   const [fechaT, setFechaT] = useState(inicial ? inicial.fecha ?? "" : fechaInicial ?? "");
   const [tipo, setTipo] = useState(inicial?.tipo ?? "tarea");
@@ -44,7 +44,7 @@ function TareaForm({ inicial, fechaInicial, usuarios, onGuardado, onCancelar }: 
     const t = titulo.trim();
     if (t.length < 2) return setError("Escribe qué hay que hacer");
     setOcupado(true); setError(null);
-    const datos = { titulo: t.slice(0, 200), descripcion: desc.trim() || null, tipo, fecha: fechaT || null, finca_id: finca || null, asignado_a: asig || null };
+    const datos = { titulo: t.slice(0, 200), descripcion: desc.trim() || null, tipo, fecha: fechaT || null, finca_id: finca || null, asignado_a: asig || (esAdmin ? null : perfil?.id ?? null) }; // quien no es administrador solo crea tareas para sí mismo (así le salen en su calendario)
     const { error } = inicial ? await db.from("tareas").update(datos).eq("id", inicial.id) : await db.from("tareas").insert({ ...datos, origen: "manual" });
     setOcupado(false);
     if (error) return setError(msgError(error));
@@ -115,7 +115,7 @@ function FilaTarea({ t, editable, usuarios, alCambiar }: { t: Tarea; editable: b
 export default function Calendario() {
   const { puedeRegistrar, esAdmin, fincas, perfil } = useAuth();
   const yo = perfil?.id ?? "";
-  const verTodos = esAdmin || perfil?.rol === "encargado"; // pueden ver el calendario de todos y asignar tareas a cualquiera
+  const verTodos = esAdmin; // solo el administrador (y el usuario «encargado», que lo es) ve el calendario de todos; el resto, solo lo asignado a ellos
   const hoy = dia(new Date());
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [elegido, setElegido] = useState(hoy);
@@ -138,7 +138,7 @@ export default function Calendario() {
     const verTodo = verTodos && vista === "todos";
     if (!verTodo) {
       if (verTodos && vista !== "mio") { q = q.eq("asignado_a", vista); sinFecha = sinFecha.eq("asignado_a", vista); }
-      else { const mio = `asignado_a.eq.${yo},asignado_a.is.null`; q = q.or(mio); sinFecha = sinFecha.or(mio); }
+      else { q = q.eq("asignado_a", yo); sinFecha = sinFecha.eq("asignado_a", yo); }
     }
     const [a, b, u] = await Promise.all([q, sinFecha, verTodos ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
     if (a.error) throw new Error(a.error.message);
@@ -153,8 +153,8 @@ export default function Calendario() {
   const cambiarMes = (n: number) => { const d = new Date(mes.getFullYear(), mes.getMonth() + n, 1); setMes(d); setElegido(dia(d)); setNueva(null); };
   const irHoy = () => { const d = new Date(); setMes(new Date(d.getFullYear(), d.getMonth(), 1)); setElegido(hoy); };
   const alGuardar = () => { setNueva(null); recargar(); };
-  /** Se puede modificar lo propio, lo asignado a uno y lo de las fincas a las que se tiene acceso; el administrador, todo. */
-  const puedeEditar = (t: Tarea) => puedeRegistrar && (esAdmin || t.created_by === yo || t.asignado_a === yo || (!!t.finca_id && fincas.some((f) => f.id === t.finca_id)));
+  /** Cada usuario ve solo lo asignado a él (el administrador, todo): lo que se ve se puede modificar si el rol lo permite. */
+  const puedeEditar = (_t: Tarea) => puedeRegistrar;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
