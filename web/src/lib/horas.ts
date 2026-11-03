@@ -7,7 +7,7 @@ export type TareaDef = { nombre: string; subtipos?: readonly string[]; cosecha?:
 export type MayorDef = { nombre: string; tareas: readonly TareaDef[] };
 
 export const MAYORES: readonly MayorDef[] = [
-  { nombre: "Instalaciones", tareas: [{ nombre: "Obra" }, { nombre: "Reparaciones", subtipos: ["Maquinaria", "Riego"] }] },
+  { nombre: "Instalaciones", tareas: [{ nombre: "Obra" }, { nombre: "Reparaciones", subtipos: ["Maquinaria"] }] },
   { nombre: "Suelos", tareas: [{ nombre: "Hierba", subtipos: ["Desbrozadora", "Tractor"] }] },
   { nombre: "Liado y guiado", tareas: [] },
   { nombre: "Otros cuidados de planta", tareas: [{ nombre: "Poda" }, { nombre: "Aplicaciones foliares" }] },

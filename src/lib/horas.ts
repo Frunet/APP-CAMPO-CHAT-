@@ -8,7 +8,7 @@ export const TAREAS: readonly TareaDef[] = [
   { nombre: "Hierba", subtipos: ["Desbrozadora", "Tractor"] },
   { nombre: "Aplicaciones foliares" },
   { nombre: "Riego" },
-  { nombre: "Reparaciones", subtipos: ["Maquinaria", "Riego"] },
+  { nombre: "Reparaciones", subtipos: ["Maquinaria"] },
   { nombre: "Poda" },
   { nombre: "Obra" },
   { nombre: "Cosecha", cosecha: true },
