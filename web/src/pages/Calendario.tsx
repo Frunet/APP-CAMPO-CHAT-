@@ -113,11 +113,14 @@ function FilaTarea({ t, editable, usuarios, alCambiar }: { t: Tarea; editable: b
 
 /** Calendario de tareas por hacer: vista de mes, tareas de cada día y lista de pendientes sin fecha. */
 export default function Calendario() {
-  const { puedeRegistrar, esAdmin, fincas } = useAuth();
+  const { puedeRegistrar, esAdmin, fincas, perfil } = useAuth();
+  const yo = perfil?.id ?? "";
   const hoy = dia(new Date());
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [elegido, setElegido] = useState(hoy);
   const [finca, setFinca] = useState("");
+  // Cada usuario ve «su» calendario (lo asignado a él y lo que no tiene dueño en sus fincas). El administrador puede ver el de todos o el de cada usuario.
+  const [vista, setVista] = useState<string>(esAdmin ? "todos" : "mio");
   const [nueva, setNueva] = useState<string | null>(null); // fecha con la que se abre el alta ("" = sin fecha)
 
   // Rejilla del mes: de lunes a domingo, 6 semanas
@@ -131,10 +134,15 @@ export default function Calendario() {
     let q = db.from("tareas").select(sel).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("created_at");
     let sinFecha = db.from("tareas").select(sel).is("fecha", null).order("created_at", { ascending: false });
     if (finca) { q = q.eq("finca_id", finca); sinFecha = sinFecha.eq("finca_id", finca); }
+    const verTodo = esAdmin && vista === "todos";
+    if (!verTodo) {
+      if (esAdmin && vista !== "mio") { q = q.eq("asignado_a", vista); sinFecha = sinFecha.eq("asignado_a", vista); }
+      else { const mio = `asignado_a.eq.${yo},asignado_a.is.null`; q = q.or(mio); sinFecha = sinFecha.or(mio); }
+    }
     const [a, b, u] = await Promise.all([q, sinFecha, esAdmin ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
     if (a.error) throw new Error(a.error.message);
     return { tareas: (a.data ?? []) as unknown as Tarea[], sinFecha: (b.data ?? []) as unknown as Tarea[], usuarios: (u.data ?? []) as Usuario[] };
-  }, [desde, finca, esAdmin]);
+  }, [desde, finca, esAdmin, vista, yo]);
 
   const tareas = datos?.tareas ?? [], sinFecha = datos?.sinFecha ?? [], usuarios = datos?.usuarios ?? [];
   const porDia = new Map<string, Tarea[]>();
@@ -158,6 +166,12 @@ export default function Calendario() {
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
+          {esAdmin && (
+            <select className="fr-select" value={vista} onChange={(e) => setVista(e.target.value)} aria-label="Calendario de">
+              <option value="todos">Calendario de todos</option><option value="mio">Mi calendario</option>
+              {usuarios.filter((u) => u.id !== yo).map((u) => <option key={u.id} value={u.id}>Calendario de {u.nombre}</option>)}
+            </select>
+          )}
           <select className="fr-select" value={finca} onChange={(e) => setFinca(e.target.value)} aria-label="Filtrar por finca"><option value="">Todas las fincas</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select>
           {puedeRegistrar && <button type="button" className="fr-boton" onClick={() => setNueva(elegido)}>＋ Añadir tarea</button>}
         </div>
