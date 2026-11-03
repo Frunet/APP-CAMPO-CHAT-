@@ -5,7 +5,7 @@ import { Field, msgError, useCarga } from "../ui";
 import { fecha, iso } from "../lib/format";
 
 type Tarea = {
-  id: string; titulo: string; descripcion: string | null; tipo: string; fecha: string | null; finca_id: string | null; completada: boolean; asignado_a: string | null;
+  id: string; titulo: string; descripcion: string | null; tipo: string; fecha: string | null; finca_id: string | null; completada: boolean; asignado_a: string | null; created_by: string | null;
   fincas: { nombre: string } | null;
 };
 type Usuario = { id: string; nombre: string };
@@ -115,12 +115,13 @@ function FilaTarea({ t, editable, usuarios, alCambiar }: { t: Tarea; editable: b
 export default function Calendario() {
   const { puedeRegistrar, esAdmin, fincas, perfil } = useAuth();
   const yo = perfil?.id ?? "";
+  const verTodos = esAdmin || perfil?.rol === "encargado"; // pueden ver el calendario de todos y asignar tareas a cualquiera
   const hoy = dia(new Date());
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [elegido, setElegido] = useState(hoy);
   const [finca, setFinca] = useState("");
   // Cada usuario ve «su» calendario (lo asignado a él y lo que no tiene dueño en sus fincas). El administrador puede ver el de todos o el de cada usuario.
-  const [vista, setVista] = useState<string>(esAdmin ? "todos" : "mio");
+  const [vista, setVista] = useState<string>(verTodos ? "todos" : "mio");
   const [nueva, setNueva] = useState<string | null>(null); // fecha con la que se abre el alta ("" = sin fecha)
 
   // Rejilla del mes: de lunes a domingo, 6 semanas
@@ -130,19 +131,19 @@ export default function Calendario() {
   const desde = dia(celdas[0]), hasta = dia(celdas[41]);
 
   const { datos, error, cargando, recargar } = useCarga(async () => {
-    const sel = "id,titulo,descripcion,tipo,fecha,finca_id,completada,asignado_a,fincas(nombre)";
+    const sel = "id,titulo,descripcion,tipo,fecha,finca_id,completada,asignado_a,created_by,fincas(nombre)";
     let q = db.from("tareas").select(sel).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("created_at");
     let sinFecha = db.from("tareas").select(sel).is("fecha", null).order("created_at", { ascending: false });
     if (finca) { q = q.eq("finca_id", finca); sinFecha = sinFecha.eq("finca_id", finca); }
-    const verTodo = esAdmin && vista === "todos";
+    const verTodo = verTodos && vista === "todos";
     if (!verTodo) {
-      if (esAdmin && vista !== "mio") { q = q.eq("asignado_a", vista); sinFecha = sinFecha.eq("asignado_a", vista); }
+      if (verTodos && vista !== "mio") { q = q.eq("asignado_a", vista); sinFecha = sinFecha.eq("asignado_a", vista); }
       else { const mio = `asignado_a.eq.${yo},asignado_a.is.null`; q = q.or(mio); sinFecha = sinFecha.or(mio); }
     }
-    const [a, b, u] = await Promise.all([q, sinFecha, esAdmin ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
+    const [a, b, u] = await Promise.all([q, sinFecha, verTodos ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
     if (a.error) throw new Error(a.error.message);
     return { tareas: (a.data ?? []) as unknown as Tarea[], sinFecha: (b.data ?? []) as unknown as Tarea[], usuarios: (u.data ?? []) as Usuario[] };
-  }, [desde, finca, esAdmin, vista, yo]);
+  }, [desde, finca, verTodos, vista, yo]);
 
   const tareas = datos?.tareas ?? [], sinFecha = datos?.sinFecha ?? [], usuarios = datos?.usuarios ?? [];
   const porDia = new Map<string, Tarea[]>();
@@ -152,6 +153,8 @@ export default function Calendario() {
   const cambiarMes = (n: number) => { const d = new Date(mes.getFullYear(), mes.getMonth() + n, 1); setMes(d); setElegido(dia(d)); setNueva(null); };
   const irHoy = () => { const d = new Date(); setMes(new Date(d.getFullYear(), d.getMonth(), 1)); setElegido(hoy); };
   const alGuardar = () => { setNueva(null); recargar(); };
+  /** Se puede modificar lo propio, lo asignado a uno y lo de las fincas a las que se tiene acceso; el administrador, todo. */
+  const puedeEditar = (t: Tarea) => puedeRegistrar && (esAdmin || t.created_by === yo || t.asignado_a === yo || (!!t.finca_id && fincas.some((f) => f.id === t.finca_id)));
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -166,7 +169,7 @@ export default function Calendario() {
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          {esAdmin && (
+          {verTodos && (
             <select className="fr-select" value={vista} onChange={(e) => setVista(e.target.value)} aria-label="Calendario de">
               <option value="todos">Calendario de todos</option><option value="mio">Mi calendario</option>
               {usuarios.filter((u) => u.id !== yo).map((u) => <option key={u.id} value={u.id}>Calendario de {u.nombre}</option>)}
@@ -213,7 +216,7 @@ export default function Calendario() {
             <h2 className="text-base font-extrabold capitalize">{textoDia(elegido)}{elegido === hoy && <span className="ml-2 text-xs font-bold normal-case text-orange-600">hoy</span>}</h2>
             {nueva !== null && <TareaForm fechaInicial={nueva} usuarios={usuarios} onGuardado={alGuardar} onCancelar={() => setNueva(null)} />}
             <ul className="space-y-2">
-              {delDia.map((t) => <FilaTarea key={t.id} t={t} editable={puedeRegistrar} usuarios={usuarios} alCambiar={recargar} />)}
+              {delDia.map((t) => <FilaTarea key={t.id} t={t} editable={puedeEditar(t)} usuarios={usuarios} alCambiar={recargar} />)}
               {!delDia.length && nueva === null && <li className="text-sm text-stone-500">No hay tareas este día.{puedeRegistrar && <> <button type="button" className="font-bold text-green-800 underline" onClick={() => setNueva(elegido)}>Añadir una</button></>}</li>}
             </ul>
           </div>
@@ -224,7 +227,7 @@ export default function Calendario() {
               {puedeRegistrar && <button type="button" className="text-sm font-bold text-green-800 underline" onClick={() => setNueva("")}>＋ Añadir</button>}
             </div>
             <ul className="space-y-2">
-              {sinFecha.map((t) => <FilaTarea key={t.id} t={t} editable={puedeRegistrar} usuarios={usuarios} alCambiar={recargar} />)}
+              {sinFecha.map((t) => <FilaTarea key={t.id} t={t} editable={puedeEditar(t)} usuarios={usuarios} alCambiar={recargar} />)}
               {!sinFecha.length && <li className="text-sm text-stone-500">Nada pendiente sin fecha.</li>}
             </ul>
           </div>
