@@ -1,6 +1,18 @@
-# Conectar un GPT de ChatGPT a las horas de campo (solo lectura)
+# Conectar un GPT de ChatGPT a los datos de campo (solo lectura)
 
-La función `consulta-horas` (Supabase) responde a ChatGPT con los datos de horas. **Solo lee**: no puede registrar ni modificar nada, y no devuelve tarifas ni costes.
+La función `consulta-horas` (Supabase) responde a ChatGPT con los datos de la app. **Solo lee**: no puede registrar ni modificar nada.
+
+## Qué puede consultar
+| Bloque | Conjuntos |
+|---|---|
+| Campo | `fincas`, `parcelas`, `cultivos_asignados`, `cultivos`, `campanas`, `festivos` |
+| Personal | `trabajadores`, `equipos` |
+| Horas | `resumenHoras` / `registrosHoras` (específicos y más completos), `horas_tractor` |
+| Producción | `cosechas` (kg, cajas, calidad, destino), `produccion_anual` (kg) |
+| Organización | `tareas` (calendario), `diario`, `documentos` (lista, sin su contenido) |
+| **Económicos (apagado)** | `gastos`, `ventas`, `movimientos`, `costes_generales`, `coste_horas`, `tarifas`, `proveedores`, e importes de `produccion_anual` |
+
+Se pueden **filtrar** (fechas, finca, texto, `campo=valor`) y **agrupar y sumar** (p. ej. «kg de Mango por finca y mes»).
 
 ## Qué necesitas
 - Una cuenta de ChatGPT con GPTs personalizados (Plus o superior).
@@ -8,27 +20,32 @@ La función `consulta-horas` (Supabase) responde a ChatGPT con los datos de hora
 
 ## Crear el GPT
 1. En ChatGPT: **Explorar GPTs → Crear**. Ve a la pestaña **Configurar**.
-2. **Nombre:** «Horas Frunet». **Instrucciones:** pega el texto de abajo.
+2. **Nombre:** «Datos Frunet». **Instrucciones:** pega el texto de abajo.
 3. Abajo del todo, **Acciones → Crear nueva acción**.
 4. **Autenticación:** *Clave de API* → tipo **Bearer** → pega la clave (`CLAVE_API`).
-5. **Esquema:** pulsa *Importar desde URL* y pega
+5. **Esquema:** *Importar desde URL* y pega
    `https://rnsoeznosqoetxtcwdzk.supabase.co/functions/v1/consulta-horas/openapi.json`
-6. **Privacidad:** puedes dejarla vacía mientras el GPT sea solo para ti. Guarda el GPT como **«Solo yo»**.
-7. Prueba con: «¿Cuántas horas de poda hubo en octubre en Rio Velez?».
+   (Si ya lo habías creado con la versión anterior, vuelve a importar el esquema para que aparezcan las operaciones nuevas.)
+6. Guarda el GPT como **«Solo yo»**.
+7. Prueba con: «¿Cuántos kg de aguacate se han cosechado este año por finca?» o «¿Qué tareas tengo pendientes esta semana?».
 
 ## Instrucciones para el GPT (pegar tal cual)
 ```
-Eres el asistente de horas de campo de Frunet. Respondes en español con datos de la acción (solo lectura).
-- Antes de filtrar por finca, trabajador, mayor o tarea, si dudas del nombre exacto, llama a obtenerCatalogos.
-- Para totales usa resumenHoras (agrupar por trabajador, dia, mes, mayor, tarea o finca). Para ver registros concretos usa registrosHoras.
-- Usa siempre fechas AAAA-MM-DD. Si el usuario no da fechas, pregunta el periodo o usa el mes en curso.
-- Los «mayores» son: Instalaciones, Suelos, Liado y guiado, Otros cuidados de planta, Riego, Cosecha, Otros y Revisión finca.
+Eres el asistente de datos de campo de Frunet. Respondes en español usando solo los datos de la acción (solo lectura).
+- Empieza llamando a listarConjuntos si no sabes qué datos hay o qué campos se pueden filtrar, agrupar o sumar.
+- Para horas del personal usa resumenHoras (totales agrupados) y registrosHoras (registros). Para el resto usa consultarDatos (filas) y resumenDatos (totales agrupados).
+- Usa fechas AAAA-MM-DD. Si el usuario no da fechas, pregunta el periodo o usa el mes o año en curso.
+- Los «mayores» de horas son: Instalaciones, Suelos, Liado y guiado, Otros cuidados de planta, Riego, Cosecha, Otros y Revisión finca.
 - Las horas de tractor son de la finca y el día: no se suman a las del personal; menciónalas aparte.
-- Da cifras con dos decimales como máximo, en formato español (1.046,5 h). No inventes datos: si la acción no devuelve algo, dilo.
-- No puedes registrar, corregir ni borrar horas: si te lo piden, explica que eso se hace en la app.
+- Si un conjunto da error 403, no tienes permiso para ese dato (es económico): dilo sin insistir.
+- Da cifras en formato español (1.046,5 h; 12.300 kg) y no inventes datos: si la acción no devuelve algo, dilo.
+- No puedes registrar, corregir ni borrar nada: si te lo piden, explica que eso se hace en la app.
 ```
 
-## Privacidad y control
-- Los datos que consultes pasan por OpenAI (nombres y códigos de trabajador incluidos). Para que solo salgan **códigos**, pon `expone_nombres = false` en la fila de la tabla `api_consulta`.
-- Para **cortar el acceso** al instante: `update api_consulta set activa = false;` (o borra la fila).
-- La función solo acepta una clave cuyo hash esté en `api_consulta`; la clave en sí no se guarda en la base de datos.
+## Interruptores y control (en Supabase → SQL Editor)
+- **Datos económicos** (apagados por defecto): `update public.api_consulta set incluye_finanzas = true;`  (y `false` para volver a apagarlos).
+- **Solo códigos de trabajador, sin nombres:** `update public.api_consulta set expone_nombres = false;`
+- **Cortar el acceso al instante:** `update public.api_consulta set activa = false;`
+
+## Privacidad
+Los datos que se consultan pasan por OpenAI (incluidos nombres y códigos de trabajador si `expone_nombres` está activo). La clave en sí no se guarda en la base de datos, solo su hash.
