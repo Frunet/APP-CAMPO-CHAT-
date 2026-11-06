@@ -80,6 +80,7 @@ Si solo quieres que deje de salir en las listas, desmarca «Activo» en lugar de
 
 export default function Personal() {
   const [busqueda, setBusqueda] = useState("");
+  const [trabajadorFiltro, setTrabajadorFiltro] = useState("");
   const [fincaFiltro, setFincaFiltro] = useState("");
   const [grupoFiltro, setGrupoFiltro] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("activo");
@@ -110,9 +111,11 @@ export default function Personal() {
     return terminos.every((t) => texto.includes(t))
       && (fincaFiltro === "sin-finca" ? sinFincaVisible : ids.some(fincaEnVista) || (!fincaFiltro && sinFincaVisible));
   };
-  const trabajadoresVisibles = trabajadores.filter(filtrar);
+  const trabajadoresDisponibles = trabajadores.filter(filtrar);
+  const trabajadorElegido = trabajadores.find((r) => r.id === trabajadorFiltro);
+  const trabajadoresVisibles = trabajadoresDisponibles.filter((r) => !trabajadorFiltro || r.id === trabajadorFiltro);
   const equiposVisibles = equipos.filter(filtrar);
-  const hayFiltros = Boolean(busqueda || fincaFiltro || grupoFiltro || estadoFiltro !== "activo");
+  const hayFiltros = Boolean(busqueda || trabajadorFiltro || fincaFiltro || grupoFiltro || estadoFiltro !== "activo");
   const histDe = (id: string) => historico.filter((h) => h.trabajador_id === id);
   const selFinca = <Field label="Finca inicial *"><select name="finca_id" className="input" required><option value="">Elige…</option>{GRUPOS_PERSONAL.map((g) => <optgroup key={g} label={g}>{fincas.filter((f) => f.activa && grupoPersonal(f) === g).map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</optgroup>)}</select></Field>;
 
@@ -154,20 +157,27 @@ export default function Personal() {
 
   return (
     <div className="space-y-4">
-      <section className="card text-sm text-stone-700">
-        <h2 className="mb-1 font-medium">Cómo se calcula el coste de un parte</h2>
-        <ul className="list-disc space-y-0.5 pl-5">
+      <details className="card text-sm text-stone-700">
+        <summary className="cursor-pointer font-medium">Cómo se calcula el coste de un parte</summary>
+        <ul className="mt-2 list-disc space-y-0.5 pl-5">
           <li><b>Día festivo</b> (lista de festivos de abajo): todas las horas × tarifa festiva.</li>
           <li><b>Resto de días</b>: horas normales × tarifa normal + horas extra × tarifa extra.</li>
           <li>Un <b>trabajador con condiciones acordadas</b> usa sus propias tarifas, y su parte se registra de forma individual. Una <b>cuadrilla</b> usa las tarifas de su equipo.</li>
           <li>Si falta una tarifa necesaria, el parte queda «sin tarifa»: el coste no se estima.</li>
           <li>Cambiar una tarifa no recalcula los partes ya registrados. Cada cambio queda en el histórico del trabajador con su fecha de inicio, y un parte nuevo usa la tarifa vigente en la fecha del parte.</li>
         </ul>
-      </section>
+      </details>
 
       <section className="card space-y-3" aria-label="Filtros de personal">
-        <h2 className="font-medium">Filtrar personal</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <h2 className="font-medium">Consultar trabajadores</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Trabajador">
+            <select className="input" value={trabajadorFiltro} onChange={(e) => setTrabajadorFiltro(e.target.value)}>
+              <option value="">Todos los trabajadores</option>
+              {trabajadorElegido && !trabajadoresDisponibles.some((r) => r.id === trabajadorFiltro) && <option value={trabajadorElegido.id}>{trabajadorElegido.codigo ? `${trabajadorElegido.codigo} · ` : ""}{trabajadorElegido.nombre}</option>}
+              {trabajadoresDisponibles.map((r) => <option key={r.id} value={r.id}>{r.codigo ? `${r.codigo} · ` : ""}{r.nombre}</option>)}
+            </select>
+          </Field>
           <Field label="Buscar nombre, código o teléfono">
             <input type="search" className="input" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Ej.: José o código 12" />
           </Field>
@@ -194,7 +204,7 @@ export default function Personal() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p role="status" className="text-sm text-stone-600">{trabajadoresVisibles.length} de {trabajadores.length} trabajadores · {equiposVisibles.length} de {equipos.length} equipos</p>
-          {hayFiltros && <button type="button" className="btn-ghost" onClick={() => { setBusqueda(""); setFincaFiltro(""); setGrupoFiltro(""); setEstadoFiltro("activo"); }}>Limpiar filtros</button>}
+          {hayFiltros && <button type="button" className="btn-ghost" onClick={() => { setBusqueda(""); setTrabajadorFiltro(""); setFincaFiltro(""); setGrupoFiltro(""); setEstadoFiltro("activo"); }}>Limpiar filtros</button>}
         </div>
       </section>
 
