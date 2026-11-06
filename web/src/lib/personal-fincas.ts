@@ -1,4 +1,7 @@
 export type AsignacionFinca = { finca_id: string; activo: boolean };
+// Los nombres se obtienen del catálogo de fincas. Evita el enlace ambiguo
+// entre la finca inicial del trabajador y sus nuevas asignaciones múltiples.
+export const CONSULTA_PERSONAL = "*, trabajadores_fincas(finca_id,activo)";
 export type PersonalConFincas = { activo?: boolean; trabajadores_fincas: AsignacionFinca[] };
 
 export function fincasActivas(trabajador: PersonalConFincas): string[] {

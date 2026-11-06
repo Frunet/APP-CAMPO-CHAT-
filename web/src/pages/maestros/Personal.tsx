@@ -5,7 +5,7 @@ import { Field, useCarga } from "../../ui";
 import { fecha } from "../../lib/format";
 import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crearTrabajador, eliminarFestivo, eliminarTrabajador, guardarFincasTrabajador } from "../../lib/maestros";
 import { GRUPOS_PERSONAL, grupoPersonal, normalizarPersonal } from "../../lib/grupos-personal";
-import { fincasActivas, fincasEnVista } from "../../lib/personal-fincas";
+import { CONSULTA_PERSONAL, fincasActivas, fincasEnVista } from "../../lib/personal-fincas";
 import { msgError } from "../../ui";
 
 const eur = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
@@ -86,7 +86,7 @@ export default function Personal() {
   const { datos, error, recargar } = useCarga(async () => {
     const [e, t, f, h, fi] = await Promise.all([
       db.from("equipos").select("*, fincas(nombre)").order("nombre"),
-      db.from("trabajadores").select("*, fincas(nombre), trabajadores_fincas(finca_id,activo)").order("nombre"),
+      db.from("trabajadores").select(CONSULTA_PERSONAL).order("nombre"),
       db.from("festivos").select("id,fecha,nombre,fincas(nombre)").order("fecha", { ascending: false }),
       db.from("trabajadores_coste").select("trabajador_id,desde,coste_hora,coste_hora_extra,coste_hora_festivo").order("desde", { ascending: false }),
       db.from("fincas").select("id,codigo,nombre,activa").order("nombre"),
