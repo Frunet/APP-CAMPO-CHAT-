@@ -93,6 +93,12 @@ export async function actualizarTrabajador(fd: FormData) {
   check(error); actualizado(data, "No se pudo actualizar el trabajador.");
   return "Trabajador actualizado. Los partes ya registrados conservan la tarifa con la que se calcularon.";
 }
+export async function guardarFincasTrabajador(fd: FormData) {
+  const fincas = fd.getAll("fincas_activas").map((id) => uuid(String(id), "Finca no válida"));
+  const { error } = await db.rpc("guardar_fincas_trabajador", { p_id: uuid(s(fd, "id"), "Trabajador no válido"), p_fincas: fincas });
+  check(error);
+  return "Fincas activas guardadas. Las horas anteriores se conservan en su finca original.";
+}
 export async function crearEquipo(fd: FormData) {
   const { error } = await db.from("equipos").insert({ ...datosPersonal(fd), finca_id: uuid(s(fd, "finca_id"), "Elige la finca") });
   check(error);

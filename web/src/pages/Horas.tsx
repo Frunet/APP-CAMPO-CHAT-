@@ -5,8 +5,9 @@ import { useCarga } from "../ui";
 import { CAMPOS_HORAS, MAX_HORAS_DIA } from "../lib/horas";
 import { registrarHoras } from "../lib/registrarHoras";
 import { iso } from "../lib/format";
+import { activoEnFinca, fincasActivas, type AsignacionFinca } from "../lib/personal-fincas";
 
-type Trab = { id: string; codigo: string | null; nombre: string; finca_id: string | null };
+type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
 type Variedad = { id: string; cultivo: string; variedad: string | null };
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : 0; };
 const vacias = () => CAMPOS_HORAS.map(() => "");
@@ -49,11 +50,15 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
     return () => clearTimeout(t);
   }, [msg]);
   const fincaEf = finca || (fincas.length === 1 ? fincas[0].id : "");
+  useEffect(() => {
+    const permitidos = new Set(trabajadores.filter((t) => fincaEf ? activoEnFinca(t, fincaEf) : fincasActivas(t).length > 0).map((t) => t.id));
+    setSel((actual) => actual.every((id) => permitidos.has(id)) ? actual : actual.filter((id) => permitidos.has(id)));
+  }, [fincaEf, trabajadores]);
   const total = horas.reduce((a, h) => a + dec(h), 0), extraN = dec(extra);
 
   const visibles = useMemo(() => {
     const q = buscar.trim().toLowerCase();
-    return trabajadores.filter((t) => (!fincaEf || !t.finca_id || t.finca_id === fincaEf) && (!q || `${t.codigo ?? ""} ${t.nombre}`.toLowerCase().includes(q)));
+    return trabajadores.filter((t) => (fincaEf ? activoEnFinca(t, fincaEf) : fincasActivas(t).length > 0) && (!q || `${t.codigo ?? ""} ${t.nombre}`.toLowerCase().includes(q)));
   }, [trabajadores, fincaEf, buscar]);
   const alternar = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const iCosecha = CAMPOS_HORAS.findIndex((c) => c.cosecha);
@@ -154,14 +159,17 @@ export default function Horas() {
   const { puedeRegistrar } = useAuth();
   const maestros = useCarga(async () => {
     const [t, v] = await Promise.all([
-      db.from("trabajadores").select("id,codigo,nombre,finca_id").eq("activo", true).order("nombre"),
+      db.from("trabajadores").select("id,codigo,nombre,activo,trabajadores_fincas(finca_id,activo)").eq("activo", true).order("nombre"),
       db.from("cultivos_maestro").select("id,cultivo,variedad").eq("activo", true).order("cultivo").order("variedad"),
     ]);
+    if (t.error) throw new Error(t.error.message);
+    if (v.error) throw new Error(v.error.message);
     return { trab: (t.data ?? []) as Trab[], vars: (v.data ?? []) as Variedad[] };
   }, []);
 
   return (
     <div className="fr-horas-pagina mx-auto max-w-6xl">
+      {maestros.error && <p role="alert" className="mb-3 text-sm text-red-600">No se ha podido cargar el personal: {maestros.error}</p>}
       {puedeRegistrar ? (
         <section className="card fr-horas-card"><FormHoras trabajadores={maestros.datos?.trab ?? []} variedades={maestros.datos?.vars ?? []} alGuardar={() => {}} /></section>
       ) : <p className="text-sm text-stone-600">Tu rol solo permite consultar las horas: míralas en «Últimos 7 días».</p>}

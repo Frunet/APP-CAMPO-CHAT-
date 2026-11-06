@@ -3,10 +3,38 @@ import { db } from "../../supabase";
 import { AccionForm } from "../../forms";
 import { Field, useCarga } from "../../ui";
 import { fecha } from "../../lib/format";
-import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crearTrabajador, eliminarFestivo, eliminarTrabajador } from "../../lib/maestros";
+import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crearTrabajador, eliminarFestivo, eliminarTrabajador, guardarFincasTrabajador } from "../../lib/maestros";
+import { GRUPOS_PERSONAL, grupoPersonal, normalizarPersonal } from "../../lib/grupos-personal";
+import { fincasActivas, fincasEnVista } from "../../lib/personal-fincas";
 import { msgError } from "../../ui";
 
 const eur = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
+
+type FincaPersonal = { id: string; nombre: string; codigo: string; activa: boolean };
+
+function FincasTrabajador({ r, fincas, onOk }: { r: any; fincas: FincaPersonal[]; onOk: () => void }) {
+  const seleccionadas = fincasActivas(r);
+  return (
+    <div className="mt-4 border-t border-stone-200 pt-3">
+      <h3 className="mb-1 text-sm font-medium">Fincas donde está activo</h3>
+      <p className="mb-3 text-xs text-stone-600">Marca todas las fincas donde trabaja. Desmarcar una finca conserva sus horas anteriores.</p>
+      {!r.activo && <p className="mb-2 text-sm text-amber-700">La ficha está inactiva. Actívala arriba para que aparezca al registrar horas.</p>}
+      <AccionForm accion={guardarFincasTrabajador} label="Guardar fincas activas" reset={false} onOk={onOk}>
+        <input type="hidden" name="id" value={r.id} />
+        {GRUPOS_PERSONAL.map((grupo) => {
+          const lista = fincas.filter((f) => grupoPersonal(f) === grupo && (f.activa || seleccionadas.includes(f.id)));
+          return lista.length > 0 && <fieldset key={grupo} className="rounded-lg border border-stone-200 p-3">
+            <legend className="px-1 text-sm font-bold">{grupo}</legend>
+            <div className="space-y-2">{lista.map((f) => <label key={f.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="fincas_activas" value={f.id} defaultChecked={seleccionadas.includes(f.id)} />
+              {f.nombre}{!f.activa && <span className="text-xs text-stone-500">(finca inactiva)</span>}
+            </label>)}</div>
+          </fieldset>;
+        })}
+      </AccionForm>
+    </div>
+  );
+}
 
 /** Campos de tarifa compartidos por equipos y trabajadores */
 function Tarifas({ v, desde }: { v?: any; desde?: boolean }) {
@@ -53,44 +81,46 @@ Si solo quieres que deje de salir en las listas, desmarca «Activo» en lugar de
 export default function Personal() {
   const [busqueda, setBusqueda] = useState("");
   const [fincaFiltro, setFincaFiltro] = useState("");
-  const [estadoFiltro, setEstadoFiltro] = useState("");
+  const [grupoFiltro, setGrupoFiltro] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState("activo");
   const { datos, error, recargar } = useCarga(async () => {
     const [e, t, f, h, fi] = await Promise.all([
       db.from("equipos").select("*, fincas(nombre)").order("nombre"),
-      db.from("trabajadores").select("*, fincas(nombre)").order("nombre"),
+      db.from("trabajadores").select("*, fincas(nombre), trabajadores_fincas(finca_id,activo)").order("nombre"),
       db.from("festivos").select("id,fecha,nombre,fincas(nombre)").order("fecha", { ascending: false }),
       db.from("trabajadores_coste").select("trabajador_id,desde,coste_hora,coste_hora_extra,coste_hora_festivo").order("desde", { ascending: false }),
-      db.from("fincas").select("id,nombre").eq("activa", true).order("nombre"),
+      db.from("fincas").select("id,codigo,nombre,activa").order("nombre"),
     ]);
-    return { equipos: (e.data ?? []) as any[], trabajadores: (t.data ?? []) as any[], festivos: (f.data ?? []) as any[], historico: (h.data ?? []) as any[], fincas: (fi.data ?? []) as { id: string; nombre: string }[] };
+    for (const r of [e, t, f, h, fi]) if (r.error) throw new Error(r.error.message);
+    return { equipos: (e.data ?? []) as any[], trabajadores: (t.data ?? []) as any[], festivos: (f.data ?? []) as any[], historico: (h.data ?? []) as any[], fincas: (fi.data ?? []) as FincaPersonal[] };
   }, []);
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-stone-500">Cargando…</p>;
   const { equipos, trabajadores, festivos, historico, fincas } = datos;
-  const normalizar = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
-  const terminos = normalizar(busqueda).trim().split(/\s+/).filter(Boolean);
+  const terminos = normalizarPersonal(busqueda).split(/\s+/).filter(Boolean);
+  const idsEnVista = (r: any): string[] => r.trabajadores_fincas
+    ? fincasEnVista(r, estadoFiltro)
+    : (!estadoFiltro || (estadoFiltro === "activo" ? r.activo : !r.activo)) && r.finca_id ? [r.finca_id] : [];
+  const fincaEnVista = (id: string) => (!fincaFiltro || fincaFiltro === id) && (!grupoFiltro || grupoPersonal(fincas.find((f) => f.id === id) ?? {}) === grupoFiltro);
   const filtrar = (r: any) => {
-    const texto = normalizar([r.nombre, r.codigo, r.telefono].filter(Boolean).join(" "));
+    const texto = normalizarPersonal([r.nombre, r.codigo, r.telefono].filter(Boolean).join(" "));
+    const ids = idsEnVista(r);
+    const sinAsignacion = r.trabajadores_fincas ? r.trabajadores_fincas.length === 0 : !r.finca_id;
+    const sinFincaVisible = sinAsignacion && !grupoFiltro && (!estadoFiltro || estadoFiltro === "inactivo");
     return terminos.every((t) => texto.includes(t))
-      && (!fincaFiltro || (fincaFiltro === "sin-finca" ? !r.finca_id : r.finca_id === fincaFiltro))
-      && (!estadoFiltro || (estadoFiltro === "activo" ? r.activo === true : r.activo === false));
+      && (fincaFiltro === "sin-finca" ? sinFincaVisible : ids.some(fincaEnVista) || (!fincaFiltro && sinFincaVisible));
   };
-  // Incluye también fincas inactivas que aún tengan personal, para poder localizar sus fichas.
-  const fincasFiltro = new Map(fincas.map((f) => [f.id, f.nombre]));
-  for (const r of [...trabajadores, ...equipos]) {
-    if (r.finca_id && !fincasFiltro.has(r.finca_id)) fincasFiltro.set(r.finca_id, r.fincas?.nombre ?? "Finca sin nombre");
-  }
   const trabajadoresVisibles = trabajadores.filter(filtrar);
   const equiposVisibles = equipos.filter(filtrar);
-  const hayFiltros = Boolean(busqueda || fincaFiltro || estadoFiltro);
+  const hayFiltros = Boolean(busqueda || fincaFiltro || grupoFiltro || estadoFiltro !== "activo");
   const histDe = (id: string) => historico.filter((h) => h.trabajador_id === id);
-  const selFinca = <Field label="Finca *"><select name="finca_id" className="input" required><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Field>;
+  const selFinca = <Field label="Finca inicial *"><select name="finca_id" className="input" required><option value="">Elige…</option>{GRUPOS_PERSONAL.map((g) => <optgroup key={g} label={g}>{fincas.filter((f) => f.activa && grupoPersonal(f) === g).map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</optgroup>)}</select></Field>;
 
   const ficha = (r: any, tipo: "equipo" | "trabajador") => (
     <details key={r.id} className="rounded-lg border border-stone-200 px-3 py-2">
       <summary className="cursor-pointer text-sm">
         {tipo === "trabajador" && <span className="font-mono text-xs text-stone-500">{r.codigo ?? "sin código"} · </span>}
-        <b>{r.nombre}</b> <span className="text-stone-500">· {r.fincas?.nombre ?? "todas las fincas"}</span> · normal {eur(r.coste_hora)} · extra {eur(r.coste_hora_extra)} · festivo {eur(r.coste_hora_festivo)}
+        <b>{r.nombre}</b> <span className="text-stone-500">· {tipo === "trabajador" ? fincasActivas(r).map((id) => fincas.find((f) => f.id === id)?.nombre ?? "Finca sin nombre").join(", ") || "sin fincas activas" : r.fincas?.nombre ?? "todas las fincas"}</span> · normal {eur(r.coste_hora)} · extra {eur(r.coste_hora_extra)} · festivo {eur(r.coste_hora_festivo)}
         {r.condiciones && <span className="text-stone-500"> · {r.condiciones}</span>}
         {!r.activo && <span className="text-red-600"> · inactivo</span>}
       </summary>
@@ -108,6 +138,7 @@ export default function Personal() {
           <Tarifas v={r} desde={tipo === "trabajador"} />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="activo" defaultChecked={r.activo} /> Activo</label>
         </AccionForm>
+        {tipo === "trabajador" && <FincasTrabajador key={r.trabajadores_fincas.map((a: any) => `${a.finca_id}:${a.activo}`).sort().join("|")} r={r} fincas={fincas} onOk={recargar} />}
         {tipo === "trabajador" && <EliminarTrabajador r={r} onOk={recargar} />}
         {tipo === "trabajador" && histDe(r.id).length > 0 && (
           <div className="mt-3 text-xs text-stone-600">
@@ -136,15 +167,21 @@ export default function Personal() {
 
       <section className="card space-y-3" aria-label="Filtros de personal">
         <h2 className="font-medium">Filtrar personal</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Buscar nombre, código o teléfono">
             <input type="search" className="input" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Ej.: José o código 12" />
+          </Field>
+          <Field label="Grupo">
+            <select className="input" value={grupoFiltro} onChange={(e) => { setGrupoFiltro(e.target.value); setFincaFiltro(""); }}>
+              <option value="">Todos los grupos</option>
+              {GRUPOS_PERSONAL.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
           </Field>
           <Field label="Finca">
             <select className="input" value={fincaFiltro} onChange={(e) => setFincaFiltro(e.target.value)}>
               <option value="">Todas las fincas</option>
               <option value="sin-finca">Sin finca específica</option>
-              {[...fincasFiltro].sort((a, b) => a[1].localeCompare(b[1], "es")).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+              {GRUPOS_PERSONAL.filter((g) => !grupoFiltro || grupoFiltro === g).map((g) => <optgroup key={g} label={g}>{fincas.filter((f) => grupoPersonal(f) === g).map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</optgroup>)}
             </select>
           </Field>
           <Field label="Estado">
@@ -157,7 +194,7 @@ export default function Personal() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p role="status" className="text-sm text-stone-600">{trabajadoresVisibles.length} de {trabajadores.length} trabajadores · {equiposVisibles.length} de {equipos.length} equipos</p>
-          {hayFiltros && <button type="button" className="btn-ghost" onClick={() => { setBusqueda(""); setFincaFiltro(""); setEstadoFiltro(""); }}>Limpiar filtros</button>}
+          {hayFiltros && <button type="button" className="btn-ghost" onClick={() => { setBusqueda(""); setFincaFiltro(""); setGrupoFiltro(""); setEstadoFiltro("activo"); }}>Limpiar filtros</button>}
         </div>
       </section>
 
@@ -180,12 +217,25 @@ export default function Personal() {
 
       <section className="card space-y-3">
         <h2 className="font-medium">Trabajadores</h2>
-        {trabajadoresVisibles.map((r) => ficha(r, "trabajador"))}
+        <p className="text-xs text-stone-600">Una sola ficha por trabajador. Puede aparecer en varias fincas; las tarifas se comparten.</p>
+        {GRUPOS_PERSONAL.filter((g) => !grupoFiltro || g === grupoFiltro).map((grupo) => {
+          const secciones = fincas.filter((f) => grupoPersonal(f) === grupo && fincaEnVista(f.id))
+            .map((f) => ({ finca: f, lista: trabajadoresVisibles.filter((r) => idsEnVista(r).includes(f.id)) })).filter((s) => s.lista.length);
+          return secciones.length > 0 && <div key={grupo} className="space-y-3">
+            <h3 className="border-b border-stone-200 pb-1 font-bold text-brand-700">{grupo}</h3>
+            {secciones.map(({ finca, lista }) => <section key={finca.id} className="space-y-2">
+              <h4 className="text-sm font-medium">{finca.nombre} <span className="text-stone-500">({lista.length}){!finca.activa && " · finca inactiva"}</span></h4>
+              {lista.map((r) => <div key={r.id}>{r.activo && !fincasActivas(r).includes(finca.id) && <p className="text-xs text-amber-700">Inactivo en esta finca</p>}{ficha(r, "trabajador")}</div>)}
+            </section>)}
+          </div>;
+        })}
+        {trabajadoresVisibles.filter((r) => !r.trabajadores_fincas.length).map((r) => ficha(r, "trabajador"))}
         {trabajadores.length > 0 && !trabajadoresVisibles.length && <p className="text-sm text-stone-500">No hay trabajadores que coincidan con los filtros.</p>}
         {!trabajadores.length && <p className="text-sm text-stone-500">Aún no hay trabajadores individuales.</p>}
         <details>
           <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Nuevo trabajador</summary>
           <div className="mt-2">
+            <p className="mb-2 text-xs text-stone-600">Elige una finca inicial. Una vez creado, abre su ficha para marcar todas sus fincas activas.</p>
             <AccionForm accion={crearTrabajador} label="Crear trabajador" className="grid gap-3 sm:grid-cols-4" onOk={recargar}>
               <Field label="Código * (único)"><input name="codigo" className="input" required maxLength={30} /></Field>
               <Field label="Nombre y apellidos *"><input name="nombre" className="input" required /></Field>

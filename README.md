@@ -32,6 +32,7 @@ Carpeta `supabase-propio/`: instalación guiada en 4 pasos (`1_instalar`, `2_apl
 - **Maestros** (solo administrador): usuarios y fincas asignadas, fincas → parcelas → lotes (opcionales), catálogo de cultivos, personal con costes (tarifa normal / extra / festivo, condiciones propias por trabajador) y festivos.
 
 ## Principios de diseño
+- **Personal por varias fincas (web):** requiere la migración `0027_trabajadores_varias_fincas.sql` antes de publicar. En Maestros → Personal se muestran por defecto los activos, agrupados en PAI (PAI MANGO, Casa y Fortaleza), FRUNET (Río Vélez) y LOMAS (LOMAS, Loma Mecias, Loma Nisperos y Río Seco). Cada trabajador conserva una sola ficha y sus tarifas; «Fincas donde está activo» permite marcar varias fincas. La baja en una finca conserva las horas anteriores. La casilla «Activo» de la ficha controla la baja global. El formulario de horas muestra solo las asignaciones activas y revisa de nuevo la asignación antes de guardar.
 - La BD es la fuente de verdad; el chat solo cifra con herramientas de consulta.
 - El chat **nunca guarda**: crea filas en `acciones_pendientes`; `/api/acciones/[id]` las guarda con la sesión del usuario (RLS) tras pulsar Confirmar.
 - RLS en todas las tablas; permisos por rol y finca autorizada. Auditoría por trigger en `audit_log`.

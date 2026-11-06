@@ -2,6 +2,7 @@ import { db } from "../supabase";
 import { CAMPOS_HORAS, MAX_HORAS_DIA } from "./horas";
 import { numero } from "./format";
 import { msgError } from "../ui";
+import { activoEnFinca } from "./personal-fincas";
 
 export type EntradaHoras = {
   finca_id: string; fecha: string; trabajadores: string[]; horas: string[]; extra: string; tractor: string; kg: string; variedad: string; actividad: string; forzar: boolean;
@@ -43,6 +44,14 @@ export async function registrarHoras(e: EntradaHoras): Promise<string> {
   if (Number.isNaN(tractor) || tractor < 0 || tractor > 24) falla("Las horas de tractor deben estar entre 0 y 24");
   if (!lineas.length && !tractor) falla("Indica las horas de al menos una tarea o del tractor");
   if (lineas.length && !ids.length) falla("Elige al menos un trabajador");
+  if (ids.length) {
+    const { data: personal, error } = await db.from("trabajadores")
+      .select("id,activo,trabajadores_fincas(finca_id,activo)").in("id", ids);
+    if (error) falla("No se pudo comprobar las fincas activas del personal. Vuelve a intentarlo.");
+    if (ids.some((id) => !personal?.some((t) => t.id === id && activoEnFinca(t, e.finca_id)))) {
+      falla("Algún trabajador ya no está activo en esta finca. Recarga la página y revisa la selección.");
+    }
+  }
   const nuevas = lineas.reduce((a, l) => a + l.h, 0);
   if (nuevas > 24) falla("Un trabajador no puede tener más de 24 h en un día");
 
