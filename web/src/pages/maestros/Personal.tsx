@@ -51,6 +51,9 @@ Si solo quieres que deje de salir en las listas, desmarca «Activo» en lugar de
 }
 
 export default function Personal() {
+  const [busqueda, setBusqueda] = useState("");
+  const [fincaFiltro, setFincaFiltro] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState("");
   const { datos, error, recargar } = useCarga(async () => {
     const [e, t, f, h, fi] = await Promise.all([
       db.from("equipos").select("*, fincas(nombre)").order("nombre"),
@@ -64,6 +67,22 @@ export default function Personal() {
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-stone-500">Cargando…</p>;
   const { equipos, trabajadores, festivos, historico, fincas } = datos;
+  const normalizar = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+  const terminos = normalizar(busqueda).trim().split(/\s+/).filter(Boolean);
+  const filtrar = (r: any) => {
+    const texto = normalizar([r.nombre, r.codigo, r.telefono].filter(Boolean).join(" "));
+    return terminos.every((t) => texto.includes(t))
+      && (!fincaFiltro || (fincaFiltro === "sin-finca" ? !r.finca_id : r.finca_id === fincaFiltro))
+      && (!estadoFiltro || (estadoFiltro === "activo" ? r.activo === true : r.activo === false));
+  };
+  // Incluye también fincas inactivas que aún tengan personal, para poder localizar sus fichas.
+  const fincasFiltro = new Map(fincas.map((f) => [f.id, f.nombre]));
+  for (const r of [...trabajadores, ...equipos]) {
+    if (r.finca_id && !fincasFiltro.has(r.finca_id)) fincasFiltro.set(r.finca_id, r.fincas?.nombre ?? "Finca sin nombre");
+  }
+  const trabajadoresVisibles = trabajadores.filter(filtrar);
+  const equiposVisibles = equipos.filter(filtrar);
+  const hayFiltros = Boolean(busqueda || fincaFiltro || estadoFiltro);
   const histDe = (id: string) => historico.filter((h) => h.trabajador_id === id);
   const selFinca = <Field label="Finca *"><select name="finca_id" className="input" required><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Field>;
 
@@ -115,9 +134,37 @@ export default function Personal() {
         </ul>
       </section>
 
+      <section className="card space-y-3" aria-label="Filtros de personal">
+        <h2 className="font-medium">Filtrar personal</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Buscar nombre, código o teléfono">
+            <input type="search" className="input" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Ej.: José o código 12" />
+          </Field>
+          <Field label="Finca">
+            <select className="input" value={fincaFiltro} onChange={(e) => setFincaFiltro(e.target.value)}>
+              <option value="">Todas las fincas</option>
+              <option value="sin-finca">Sin finca específica</option>
+              {[...fincasFiltro].sort((a, b) => a[1].localeCompare(b[1], "es")).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+            </select>
+          </Field>
+          <Field label="Estado">
+            <select className="input" value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
+              <option value="">Activos e inactivos</option>
+              <option value="activo">Solo activos</option>
+              <option value="inactivo">Solo inactivos</option>
+            </select>
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <p role="status" className="text-sm text-stone-600">{trabajadoresVisibles.length} de {trabajadores.length} trabajadores · {equiposVisibles.length} de {equipos.length} equipos</p>
+          {hayFiltros && <button type="button" className="btn-ghost" onClick={() => { setBusqueda(""); setFincaFiltro(""); setEstadoFiltro(""); }}>Limpiar filtros</button>}
+        </div>
+      </section>
+
       <section className="card space-y-3">
         <h2 className="font-medium">Equipos y cuadrillas <span className="text-xs font-normal text-stone-500">(tarifa por persona y hora)</span></h2>
-        {equipos.map((r) => ficha(r, "equipo"))}
+        {equiposVisibles.map((r) => ficha(r, "equipo"))}
+        {equipos.length > 0 && !equiposVisibles.length && <p className="text-sm text-stone-500">No hay equipos que coincidan con los filtros.</p>}
         {!equipos.length && <p className="text-sm text-stone-500">Aún no hay equipos.</p>}
         <details>
           <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Nuevo equipo / cuadrilla</summary>
@@ -132,8 +179,9 @@ export default function Personal() {
       </section>
 
       <section className="card space-y-3">
-        <h2 className="font-medium">Trabajadores con condiciones propias</h2>
-        {trabajadores.map((r) => ficha(r, "trabajador"))}
+        <h2 className="font-medium">Trabajadores</h2>
+        {trabajadoresVisibles.map((r) => ficha(r, "trabajador"))}
+        {trabajadores.length > 0 && !trabajadoresVisibles.length && <p className="text-sm text-stone-500">No hay trabajadores que coincidan con los filtros.</p>}
         {!trabajadores.length && <p className="text-sm text-stone-500">Aún no hay trabajadores individuales.</p>}
         <details>
           <summary className="cursor-pointer text-sm font-medium text-brand-700">＋ Nuevo trabajador</summary>
