@@ -32,17 +32,17 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
   const [editando, setEditando] = useState(false);
   const [sel, setSel] = useState(ini.sel);
   const [horas, setHoras] = useState(String(p.horas_por_trabajador));
-  const [extra, setExtra] = useState(String(p.horas_extra_por_trabajador || ""));
+
   const [obs, setObs] = useState(ini.obs);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const nombre = nombreDe(p);
 
   async function guardar() {
-    const h = dec(horas), e = extra.trim() ? dec(extra) : 0;
+    const h = dec(horas);
     if (!(h > 0 && h <= 24)) return setMsg("Las horas deben estar entre 0 y 24");
-    if (Number.isNaN(e) || e < 0 || e > h) return setMsg("Las horas extra no pueden superar las horas");
-    const cambios: Record<string, unknown> = { horas_por_trabajador: h, horas_extra_por_trabajador: e };
+
+    const cambios: Record<string, unknown> = { horas_por_trabajador: h };
     if (sel === KEEP) cambios.actividad = obs.trim() || null;
     else { const c = CAMPOS_HORAS[Number(sel)]; cambios.tipo_trabajo = c.tarea; cambios.mayor = c.mayor; cambios.actividad = [c.subtipo, obs.trim()].filter(Boolean).join(" · ") || null; }
     setOcupado(true); setMsg(null);
@@ -88,7 +88,7 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
             </select>
           </Field>
           <Field label="Horas"><input inputMode="decimal" className="input" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
-          <Field label="De ellas, extra"><input inputMode="decimal" className="input" value={extra} onChange={(e) => setExtra(e.target.value)} /></Field>
+          <p className="text-sm">Las extras se recalculan automáticamente al superar 7 h en la jornada, sumando todas las fincas.</p>
           <Field label="Observaciones"><input className="input" maxLength={400} value={obs} onChange={(e) => setObs(e.target.value)} /></Field>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -37,7 +37,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [buscar, setBuscar] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const [horas, setHoras] = useState<string[]>(vacias());
-  const [extra, setExtra] = useState("");
+
   const [tractor, setTractor] = useState("");
   const [kg, setKg] = useState("");
   const [variedad, setVariedad] = useState("");
@@ -56,7 +56,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
     const permitidos = new Set(trabajadores.filter((t) => fincaEf ? activoEnFinca(t, fincaEf) : fincasActivas(t).length > 0).map((t) => t.id));
     setSel((actual) => actual.every((id) => permitidos.has(id)) ? actual : actual.filter((id) => permitidos.has(id)));
   }, [fincaEf, trabajadores]);
-  const total = horas.reduce((a, h) => a + dec(h), 0), extraN = dec(extra);
+  const total = horas.reduce((a, h) => a + dec(h), 0);
 
   const visibles = useMemo(() => {
     const q = buscar.trim().toLowerCase();
@@ -71,9 +71,9 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
     ev.preventDefault();
     setOcupado(true); setMsg(null);
     try {
-      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, extra, tractor, kg, variedad, actividad, forzar });
+      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, extra: "0", tractor, kg, variedad, actividad, forzar });
       setMsg({ ok });
-      setSel([]); setHoras(vacias()); setExtra(""); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
+      setSel([]); setHoras(vacias()); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
       alGuardar();
     } catch (e) { setMsg({ error: (e as Error).message }); }
     setOcupado(false);
@@ -107,13 +107,12 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
 
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           <Caja tarea="🚜 Tractor día (h)"><input inputMode="decimal" className={`input input-sm ${tractor ? "fr-lleno" : ""}`} placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Caja>
-          <Caja tarea="Extra (h)"><input inputMode="decimal" className={`input input-sm ${extra ? "fr-lleno" : ""} ${extraN > total ? "!border-red-400" : ""}`} placeholder="0" value={extra} onChange={(e) => setExtra(e.target.value)} /></Caja>
+          <Caja tarea="Horas extra"><p className="text-xs text-stone-600">Automáticas: lo que pase de 7 h por trabajador y día, entre todas las fincas.</p></Caja>
           <div><Caja tarea="Observaciones"><input className="input input-sm" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Caja></div>
         </div>
 
-        {(total > MAX_HORAS_DIA || extraN > total || pedirForzar) && (
+        {(total > MAX_HORAS_DIA || pedirForzar) && (
           <p className={`text-xs ${total > MAX_HORAS_DIA ? "font-bold text-amber-700" : "text-stone-600"}`}>
-            {extraN > total && <span className="text-red-600">Las extra no pueden superar el total. </span>}
             {total > MAX_HORAS_DIA && <>⚠ Pasa de {MAX_HORAS_DIA} h en un día. </>}
             <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={forzar} onChange={(e) => setForzar(e.target.checked)} /> Registrar igualmente (más de {MAX_HORAS_DIA} h)</label>
           </p>
@@ -139,7 +138,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
       <div className="fr-horas-barra">
         <button className="btn" disabled={ocupado}>{ocupado ? "Guardando…" : "Añadir"}</button>
         <span className={`min-w-0 text-sm font-bold ${total > MAX_HORAS_DIA ? "text-amber-700" : "text-stone-700"}`}>
-          {sel.length} marcado{sel.length === 1 ? "" : "s"} · {es(total)} h cada uno{extraN > 0 && <> ({es(extraN)} extra)</>}
+          {sel.length} marcado{sel.length === 1 ? "" : "s"} · {es(total)} h cada uno · extras automáticas
           {sel.length > 0 && total > 0 && <> · total {es(total * sel.length)} h</>}
           {nombresSel.length > 0 && <span className="block truncate text-xs font-semibold text-stone-600">{nombresSel.join(", ")}</span>}
         </span>
