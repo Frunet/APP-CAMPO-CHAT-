@@ -13,6 +13,7 @@ import Hoy from "./pages/Hoy";
 import ImportarHoras from "./pages/ImportarHoras";
 import Costes from "./pages/Costes";
 import MiPersonal from "./pages/MiPersonal";
+import ConexionChatGPT, { idAutorizacion } from "./pages/ConexionChatGPT";
 
 const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" | "registro" }[] = [
   { to: "/ayer", texto: "Ayer" },
@@ -36,7 +37,7 @@ function Shell() {
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/personal" ? MiPersonal : ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/ayer" || ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
+  const Pagina = ruta === "/conectar-chatgpt" || idAutorizacion() ? ConexionChatGPT : ruta === "/personal" ? MiPersonal : ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/ayer" || ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
   return (
     <div className="fr-fondo min-h-screen" style={fondo}>
       <header ref={medirCabecera} className="fr-cabecera sticky top-0 z-10">

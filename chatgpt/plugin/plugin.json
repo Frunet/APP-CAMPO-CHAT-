@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "datos-frunet",
+  "version": "1.0.0",
+  "description": "Consulta las horas, extras, costes de mano de obra, trabajadores activos y calendario de Frunet. Solo lectura de las fincas autorizadas, con costes autorizados por perfil, sin tarifas ni administración.",
+  "author": { "name": "FRUNET" },
+  "extensions": { "com.openai": { "interface": {
+    "displayName": "Datos Frunet",
+    "shortDescription": "Horas, personal y tareas",
+    "longDescription": "Consulta tus datos de campo en español. Compara horas de PAI, FRUNET y LOMAS, revisa tareas realizadas y pendientes y consulta trabajadores activos. Consulta costes de mano de obra según tu perfil. No modifica información ni accede a tarifas o secretos.",
+    "defaultPrompt": ["¿Qué trabajos se realizaron ayer en PAI?", "Compara las horas de PAI, FRUNET y LOMAS del 3 al 7 de noviembre de 2026.", "¿Qué trabajadores están activos en mis fincas?"]
+  } } }
+}

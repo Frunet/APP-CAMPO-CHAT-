@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": { "datos-frunet": {
+    "type": "streamable-http",
+    "url": "https://rnsoeznosqoetxtcwdzk.supabase.co/functions/v1/datos-frunet",
+    "extensions": { "com.openai": { "auth": {
+      "type": "oauth",
+      "client": { "mode": "dcr" },
+      "authorizationServerBase": "https://rnsoeznosqoetxtcwdzk.supabase.co/auth/v1",
+      "authorizationUrl": "https://rnsoeznosqoetxtcwdzk.supabase.co/auth/v1/oauth/authorize",
+      "tokenUrl": "https://rnsoeznosqoetxtcwdzk.supabase.co/auth/v1/oauth/token",
+      "baseScopes": [], "defaultScopes": [], "oidcEnabled": false
+    } } }
+  } }
+}
