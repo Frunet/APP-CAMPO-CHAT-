@@ -7,7 +7,7 @@ import { fecha, iso, num } from "../lib/format";
 
 type Parte = {
   id: string; fecha: string; finca_id: string; mayor: string | null; tipo_trabajo: string | null; actividad: string | null; num_trabajadores: number;
-  horas_por_trabajador: number; horas_extra_por_trabajador: number; horas_totales: number; trabajador_id: string | null; trabajador_nombre: string | null;
+  horas_por_trabajador: number; horas_extra_por_trabajador: number; horas_extra_manuales: number; horas_totales: number; trabajador_id: string | null; trabajador_nombre: string | null;
   trabajadores: { codigo: string | null; nombre: string } | null; fincas: { nombre: string } | null;
 };
 type Tractor = { id: string; fecha: string; horas: number; observaciones: string | null; fincas: { nombre: string } | null };
@@ -32,6 +32,7 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
   const [editando, setEditando] = useState(false);
   const [sel, setSel] = useState(ini.sel);
   const [horas, setHoras] = useState(String(p.horas_por_trabajador));
+  const [extra, setExtra] = useState(String(p.horas_extra_manuales || ""));
 
   const [obs, setObs] = useState(ini.obs);
   const [msg, setMsg] = useState<string | null>(null);
@@ -41,8 +42,10 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
   async function guardar() {
     const h = dec(horas);
     if (!(h > 0 && h <= 24)) return setMsg("Las horas deben estar entre 0 y 24");
+    const e = extra.trim() ? dec(extra) : 0;
+    if (!(e >= 0 && e <= h)) return setMsg("Las extras manuales deben estar entre cero y las horas del parte");
 
-    const cambios: Record<string, unknown> = { horas_por_trabajador: h };
+    const cambios: Record<string, unknown> = { horas_por_trabajador: h, horas_extra_manuales: e };
     if (sel === KEEP) cambios.actividad = obs.trim() || null;
     else { const c = CAMPOS_HORAS[Number(sel)]; cambios.tipo_trabajo = c.tarea; cambios.mayor = c.mayor; cambios.actividad = [c.subtipo, obs.trim()].filter(Boolean).join(" · ") || null; }
     setOcupado(true); setMsg(null);
@@ -88,7 +91,7 @@ function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
             </select>
           </Field>
           <Field label="Horas"><input inputMode="decimal" className="input" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
-          <p className="text-sm">Las extras se recalculan automáticamente al superar 7 h en la jornada, sumando todas las fincas.</p>
+          <Field label="De ellas, extras manuales"><input inputMode="decimal" className="input" value={extra} onChange={e=>setExtra(e.target.value)} /><small>Incluidas en las horas del parte. Se respeta el mínimo automático de la jornada, sin duplicarlas.</small></Field>
           <Field label="Observaciones"><input className="input" maxLength={400} value={obs} onChange={(e) => setObs(e.target.value)} /></Field>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -179,7 +182,7 @@ export default function Ultimos7() {
   const { datos, error, cargando, recargar } = useCarga(async () => {
     const [a, b] = await Promise.all([
       db.from("partes_trabajo")
-        .select("id,fecha,finca_id,mayor,tipo_trabajo,actividad,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,horas_totales,trabajador_id,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
+        .select("id,fecha,finca_id,mayor,tipo_trabajo,actividad,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,horas_extra_manuales,horas_totales,trabajador_id,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
         .gte("fecha", desde).lte("fecha", hasta).order("created_at", { ascending: false }).limit(2000),
       db.from("horas_tractor").select("id,fecha,horas,observaciones,fincas(nombre)").gte("fecha", desde).lte("fecha", hasta),
     ]);

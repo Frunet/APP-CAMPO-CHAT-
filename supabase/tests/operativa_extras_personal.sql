@@ -1,4 +1,4 @@
--- Ejecutar solo en una base aislada con las migraciones 0001-0031 aplicadas.
+-- Ejecutar solo en una base aislada con las migraciones 0001-0032 aplicadas.
 -- Todo se revierte al terminar; no usar con datos reales.
 begin;
 grant select,insert,update,delete on all tables in schema public to authenticated;
@@ -36,6 +36,30 @@ begin
  if (select horas_extra_totales from public.partes_trabajo where id=c)<>0.5 then raise exception 'No calculó medias horas';end if;
  perform public.importar_horas_revisadas(jsonb_build_array(jsonb_build_object('fecha','2026-10-03','finca_id',f1,'trabajador_id',t,'horas_por_trabajador',7.5,'horas_extra_por_trabajador',0,'mayor','Otros','tipo_trabajo','Otros')));
  if (select count(*) from public.partes_trabajo where fecha='2026-10-03' and trabajador_id=t)<>1 then raise exception 'Reimportación duplicada con extras automáticas';end if;
+end $$;
+do $$declare a uuid; b uuid; t uuid:='93000000-0000-0000-0000-000000000001'; f1 uuid:='92000000-0000-0000-0000-000000000001'; f2 uuid:='92000000-0000-0000-0000-000000000002';begin
+ insert into public.partes_trabajo(fecha,finca_id,trabajador_id,horas_por_trabajador,horas_extra_manuales,mayor,tipo_trabajo)
+ values('2026-10-04',f1,t,7,7,'Otros','Otros') returning id into a;
+ if (select horas_extra_totales from public.partes_trabajo where id=a)<>7 then raise exception 'No aceptó siete horas extras manuales en festivo';end if;
+ if (select coste_total from public.partes_trabajo where id=a)<>105 then raise exception 'No aplicó la tarifa extra a las manuales';end if;
+ update public.partes_trabajo set horas_por_trabajador=9 where id=a;
+ if (select horas_extra_totales from public.partes_trabajo where id=a)<>7 then raise exception 'Duplicó las manuales con las automáticas';end if;
+ update public.partes_trabajo set horas_extra_manuales=1 where id=a;
+ if (select horas_extra_totales from public.partes_trabajo where id=a)<>2 then raise exception 'No respetó el mínimo automático';end if;
+ insert into public.partes_trabajo(fecha,finca_id,trabajador_id,horas_por_trabajador,horas_extra_manuales,mayor,tipo_trabajo)
+ values('2026-10-05',f1,t,5,0,'Otros','Otros') returning id into a;
+ insert into public.partes_trabajo(fecha,finca_id,trabajador_id,horas_por_trabajador,horas_extra_manuales,mayor,tipo_trabajo)
+ values('2026-10-05',f2,t,4,4,'Otros','Otros') returning id into b;
+ if (select sum(horas_extra_totales) from public.partes_trabajo where trabajador_id=t and fecha='2026-10-05')<>4 then raise exception 'Error al combinar manuales entre fincas';end if;
+ update public.partes_trabajo set horas_extra_manuales=0 where id=b;
+ if (select sum(horas_extra_totales) from public.partes_trabajo where trabajador_id=t and fecha='2026-10-05')<>2 then raise exception 'No volvió al cálculo automático';end if;
+ begin
+ update public.partes_trabajo set horas_extra_manuales=6 where id=a;
+ raise exception 'Aceptó extras superiores al total';
+ exception when check_violation then null;end;
+ perform public.importar_horas_revisadas(jsonb_build_array(jsonb_build_object('fecha','2026-10-06','finca_id',f1,'trabajador_id',t,'horas_por_trabajador',7,'horas_extra_por_trabajador',7,'mayor','Otros','tipo_trabajo','Otros')));
+ if (select horas_extra_manuales from public.partes_trabajo where trabajador_id=t and fecha='2026-10-06')<>7 or
+ (select horas_extra_totales from public.partes_trabajo where trabajador_id=t and fecha='2026-10-06')<>7 then raise exception 'La importación perdió las extras manuales';end if;
 end $$;
 insert into public.trabajadores(id,finca_id,nombre,codigo,activo) values('93000000-0000-0000-0000-000000000003','92000000-0000-0000-0000-000000000002','Disponible de otra finca','EXTRA3',true);
 set role authenticated;

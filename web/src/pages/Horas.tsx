@@ -37,6 +37,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [buscar, setBuscar] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const [horas, setHoras] = useState<string[]>(vacias());
+  const [extra, setExtra] = useState("");
 
   const [tractor, setTractor] = useState("");
   const [kg, setKg] = useState("");
@@ -71,9 +72,9 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
     ev.preventDefault();
     setOcupado(true); setMsg(null);
     try {
-      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, extra: "0", tractor, kg, variedad, actividad, forzar });
+      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, extra, tractor, kg, variedad, actividad, forzar });
       setMsg({ ok });
-      setSel([]); setHoras(vacias()); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
+      setSel([]); setHoras(vacias()); setExtra(""); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
       alGuardar();
     } catch (e) { setMsg({ error: (e as Error).message }); }
     setOcupado(false);
@@ -107,7 +108,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
 
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           <Caja tarea="🚜 Tractor día (h)"><input inputMode="decimal" className={`input input-sm ${tractor ? "fr-lleno" : ""}`} placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Caja>
-          <Caja tarea="Horas extra"><p className="text-xs text-stone-600">Automáticas: lo que pase de 7 h por trabajador y día, entre todas las fincas.</p></Caja>
+          <Caja tarea="De ellas, extras manuales (h)"><input inputMode="decimal" className={`input input-sm ${extra ? "fr-lleno" : ""}`} placeholder="0" value={extra} onChange={e=>setExtra(e.target.value)} /><p className="mt-1 text-[10px] text-stone-600">Por persona, incluidas en el total; por ejemplo, 7 h extras en un festivo. Se mantiene el mínimo automático al superar 7 h/día, sin duplicarlas.</p></Caja>
           <div><Caja tarea="Observaciones"><input className="input input-sm" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Caja></div>
         </div>
 

@@ -76,7 +76,7 @@ export async function registrarHoras(e: EntradaHoras): Promise<string> {
   const fallos: string[] = [];
   for (const tid of ids) for (const l of lineas) {
     const { error } = await db.from("partes_trabajo").insert({
-      fecha: e.fecha, finca_id: e.finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, horas_extra_por_trabajador: l.extra, tipo_trabajo: l.tarea, mayor: l.mayor, actividad: l.actividad, origen: "manual",
+      fecha: e.fecha, finca_id: e.finca_id, trabajador_id: tid, num_trabajadores: 1, horas_por_trabajador: l.h, horas_extra_manuales: l.extra, tipo_trabajo: l.tarea, mayor: l.mayor, actividad: l.actividad, origen: "manual",
     });
     if (!error) hechos++; else if (error.code === "23505") duplicados++; else if (fallos.length < 2) fallos.push(msgError(error));
   }
