@@ -6,6 +6,7 @@ import { CAMPOS_HORAS, MAX_HORAS_DIA } from "../lib/horas";
 import { registrarHoras } from "../lib/registrarHoras";
 import { iso } from "../lib/format";
 import { activoEnFinca, fincasActivas, type AsignacionFinca } from "../lib/personal-fincas";
+import RepetirDia from "../components/RepetirDia";
 
 type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
 type Variedad = { id: string; cultivo: string; variedad: string | null };
@@ -44,6 +45,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [forzar, setForzar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
+  const [repetir, setRepetir] = useState(false);
   useEffect(() => {
     if (!msg?.ok) return;
     const t = setTimeout(() => setMsg(null), 7000);
@@ -78,13 +80,15 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   }
 
   return (
-    <form onSubmit={enviar} className="fr-horas">
+    <><form onSubmit={enviar} className="fr-horas">
       {/* Campos: fijos */}
       <section className="fr-horas-campos space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <Caja tarea="Finca *"><select className="input input-sm" required value={fincaEf} onChange={(e) => setFinca(e.target.value)}><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Caja>
           <Caja tarea="Fecha *"><input type="date" className="input input-sm" required value={fechaD} max={hoy} onChange={(e) => setFecha(e.target.value)} /></Caja>
         </div>
+
+        <button type="button" className="btn-ghost !py-1" disabled={!fincaEf || !fechaD || ocupado} onClick={() => setRepetir(true)}>Repetir el día anterior</button>
 
         <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {CAMPOS_HORAS.map((c, i) => (
@@ -150,7 +154,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
           </div>
         </div>
       )}
-    </form>
+    </form>{repetir && fincas.some((f) => f.id === fincaEf) && <RepetirDia finca={fincas.find((f) => f.id === fincaEf)!} destino={fechaD} trabajadores={trabajadores} cerrar={() => setRepetir(false)} alGuardar={alGuardar} />}</>
   );
 }
 

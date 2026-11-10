@@ -48,4 +48,6 @@ Eres el asistente de datos de campo de Frunet. Respondes en español usando solo
 - **Cortar el acceso al instante:** `update public.api_consulta set activa = false;`
 
 ## Privacidad
+La consulta reconoce los grupos PAI (PAI MANGO, Casa y Fortaleza), FRUNET (Río Vélez) y LOMAS (LOMAS, Loma Mecias, Loma Nisperos y Río Seco). Un trabajador conserva una sola ficha, aunque figure activo en varias fincas. Para contar personas únicas usa el total del conjunto; los grupos pueden compartir personas. Puedes preguntar «¿Qué trabajadores están activos en PAI?» o «Compara las horas de PAI, FRUNET y LOMAS del 3 al 7 de noviembre de 2026». Reimporta el esquema de acciones si tu GPT conserva una versión anterior. El acceso sigue siendo de solo lectura y los datos económicos continúan desactivados.
+
 Los datos que se consultan pasan por OpenAI (incluidos nombres y códigos de trabajador si `expone_nombres` está activo). La clave en sí no se guarda en la base de datos, solo su hash.

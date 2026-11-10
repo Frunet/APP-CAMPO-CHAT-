@@ -13,6 +13,15 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 
 const MAYORES = ["Instalaciones", "Suelos", "Liado y guiado", "Otros cuidados de planta", "Riego", "Cosecha", "Otros", "Revisión finca"];
 const TAREAS = ["Obra", "Reparaciones", "Hierba", "Poda", "Aplicaciones foliares", "Riego", "Cosecha", "Otros", "Revisión finca"];
+const normaliza = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+function grupoFinca(nombre: string): string {
+  const n = normaliza(nombre);
+  if (/^pai( |$)/.test(n) || /^(casa|fortaleza|avo casa|avo forta|avo fortaleza)$/.test(n)) return "PAI";
+  if (/^frunet( |$)/.test(n) || n === "rio velez") return "FRUNET";
+  if (/^lomas?( |$)/.test(n) || n === "rio seco") return "LOMAS";
+  return "Otras fincas";
+}
+const coincideFinca = (nombre: string, filtro: string) => normaliza(nombre).includes(normaliza(filtro)) || normaliza(grupoFinca(nombre)) === normaliza(filtro);
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const PREFIJO = /^(\d+)\s*-\s*/;
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-api-key, content-type", "Access-Control-Allow-Methods": "GET, OPTIONS" };
@@ -58,8 +67,11 @@ const DATASETS: Record<string, DS> = {
   campanas: { titulo: "Campañas", descripcion: "Campañas agrícolas.", tabla: "campanas", select: "nombre,fecha_inicio,fecha_fin", mapa: (r) => ({ campana: r.nombre, inicio: r.fecha_inicio, fin: r.fecha_fin }), agrupables: [], sumables: [], orden: "fecha_inicio" },
   festivos: { titulo: "Festivos", descripcion: "Festivos definidos.", tabla: "festivos", select: "fecha,nombre,fincas(nombre)", fecha: "fecha", mapa: (r) => ({ fecha: r.fecha, festivo: r.nombre, finca: r.fincas?.nombre ?? "Todas" }), agrupables: ["finca"], sumables: [], orden: "fecha" },
   trabajadores: {
-    titulo: "Trabajadores", descripcion: "Personal (código y, si está permitido, nombre) y su finca.", tabla: "trabajadores", select: "codigo,nombre,activo,fincas(nombre)",
-    mapa: (r, c) => ({ ...persona(r.nombre, r.codigo, c), finca: r.fincas?.nombre ?? null, activo: r.activo }), agrupables: ["finca", "activo"], sumables: [], orden: "nombre",
+    titulo: "Trabajadores", descripcion: "Una ficha por persona, con sus fincas activas. Agrupar por finca o grupo cuenta cada persona una vez en cada finca o grupo.", tabla: "trabajadores", select: "codigo,nombre,activo,trabajadores_fincas(activo,fincas!trabajadores_fincas_finca_id_fkey(nombre))",
+    mapa: (r, c) => {
+      const fincas = (r.trabajadores_fincas ?? []).filter((a: any) => a.activo).map((a: any) => a.fincas?.nombre).filter(Boolean) as string[];
+      return { ...persona(r.nombre, r.codigo, c), finca: fincas.join(" / ") || null, fincas_activas: fincas, grupos: [...new Set(fincas.map(grupoFinca))], activo: r.activo };
+    }, agrupables: ["finca", "grupo", "activo"], sumables: [], orden: "nombre",
   },
   equipos: { titulo: "Equipos", descripcion: "Cuadrillas.", tabla: "equipos", select: "nombre,activo,fincas(nombre)", mapa: (r) => ({ equipo: r.nombre, finca: r.fincas?.nombre, activo: r.activo }), agrupables: ["finca", "activo"], sumables: [] },
   cosechas: {
@@ -126,7 +138,7 @@ function especificacion(base: string) {
   const filtros = [
     { name: "desde", in: "query", schema: { type: "string", format: "date" }, description: "Fecha inicial (AAAA-MM-DD). Por defecto, hace 30 días." },
     { name: "hasta", in: "query", schema: { type: "string", format: "date" }, description: "Fecha final (AAAA-MM-DD). Por defecto, hoy." },
-    { name: "finca", in: "query", schema: { type: "string" }, description: "Nombre (o parte) de la finca, p. ej. 'Rio Velez'." },
+    { name: "finca", in: "query", schema: { type: "string" }, description: "Nombre de finca o grupo: PAI (Mango, Casa, Fortaleza), FRUNET (Río Vélez), LOMAS (Lomas, Mecias, Nísperos, Río Seco)." },
     { name: "trabajador", in: "query", schema: { type: "string" }, description: "Código o nombre (o parte) del trabajador, p. ej. '3008'." },
     { name: "mayor", in: "query", schema: { type: "string", enum: MAYORES }, description: "Agrupación de tareas." },
     { name: "tarea", in: "query", schema: { type: "string" }, description: "Tarea concreta, p. ej. 'Poda'." },
@@ -135,7 +147,7 @@ function especificacion(base: string) {
   const comunes = [
     { name: "desde", in: "query", schema: { type: "string", format: "date" }, description: "Fecha inicial (AAAA-MM-DD) para los conjuntos con fecha. Si no se indica, no se limita por fecha." },
     { name: "hasta", in: "query", schema: { type: "string", format: "date" }, description: "Fecha final (AAAA-MM-DD)." },
-    { name: "finca", in: "query", schema: { type: "string" }, description: "Nombre (o parte) de la finca." },
+    { name: "finca", in: "query", schema: { type: "string" }, description: "Nombre de finca o grupo PAI, FRUNET o LOMAS." },
     { name: "buscar", in: "query", schema: { type: "string" }, description: "Texto libre: busca en todos los campos de texto." },
     { name: "filtros", in: "query", schema: { type: "string" }, description: "Filtros por campo, separados por ';' : 'cultivo=Mango;variedad=Osteen'. Los campos disponibles están en listarConjuntos." },
   ];
@@ -163,7 +175,7 @@ function especificacion(base: string) {
       "/horas/resumen": {
         get: {
           operationId: "resumenHoras", summary: "Totales de horas de personal agrupados (por trabajador, día, mes, mayor, tarea o finca)",
-          parameters: [...filtros, { name: "agrupar", in: "query", schema: { type: "string", enum: ["trabajador", "dia", "mes", "mayor", "tarea", "finca"], default: "trabajador" }, description: "Cómo agrupar los totales." }],
+          parameters: [...filtros, { name: "agrupar", in: "query", schema: { type: "string", enum: ["trabajador", "dia", "mes", "mayor", "tarea", "finca", "grupo"], default: "trabajador" }, description: "Cómo agrupar los totales; grupo reúne PAI, FRUNET y LOMAS." }],
           responses: { "200": { description: "OK" } },
         },
       },
@@ -248,7 +260,7 @@ Deno.serve(async (req) => {
 
       const quita = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
       const fincaTxt = quita(q("finca"));
-      if (fincaTxt) filas = filas.filter((r) => quita(String(r.finca ?? "")).includes(fincaTxt));
+      if (fincaTxt) filas = filas.filter((r) => Array.isArray(r.fincas_activas) ? r.fincas_activas.some((f: string) => coincideFinca(f, fincaTxt)) : coincideFinca(String(r.finca ?? ""), fincaTxt));
       const buscar = quita(q("buscar"));
       if (buscar) filas = filas.filter((r) => Object.values(r).some((v) => typeof v === "string" && quita(v).includes(buscar)));
       for (const par of q("filtros").split(";").map((x) => x.trim()).filter(Boolean)) {
@@ -270,6 +282,13 @@ Deno.serve(async (req) => {
       // resumen
       const campos = q("agrupar").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2);
       for (const c of campos) if (!ds.agrupables.includes(c)) return json({ error: `No se puede agrupar por «${c}»`, agrupables: ds.agrupables }, 400);
+      if (nombre === "trabajadores" && campos.some((c) => c === "finca" || c === "grupo")) {
+        filas = filas.flatMap((r) => {
+          const fs = (r.fincas_activas as string[]).filter((f) => !fincaTxt || coincideFinca(f, fincaTxt));
+          if (campos.includes("finca")) return (fs.length ? fs : [null]).map((f) => ({ ...r, finca: f, grupo: f ? grupoFinca(f) : null }));
+          return [...new Set(fs.map(grupoFinca))].map((g) => ({ ...r, grupo: g }));
+        });
+      }
       const suma = q("suma");
       if (suma && !ds.sumables.includes(suma)) return json({ error: `No se puede sumar «${suma}»`, sumables: ds.sumables }, 400);
       const grupos = new Map<string, any>();
@@ -292,13 +311,14 @@ Deno.serve(async (req) => {
     if (ruta === "/catalogos") {
       const [f, t] = await Promise.all([
         admin.from("fincas").select("nombre").eq("activa", true).order("nombre"),
-        admin.from("trabajadores").select("codigo,nombre").eq("activo", true).order("nombre"),
+        admin.from("trabajadores").select("codigo,nombre,trabajadores_fincas(activo,fincas!trabajadores_fincas_finca_id_fkey(nombre))").eq("activo", true).order("nombre"),
       ]);
       return json({
-        fincas: (f.data ?? []).map((x) => x.nombre), mayores: MAYORES, tareas: TAREAS,
+        fincas: (f.data ?? []).map((x) => x.nombre), grupos: ["PAI", "FRUNET", "LOMAS"].map((g) => ({ grupo: g, fincas: (f.data ?? []).filter((x) => grupoFinca(x.nombre) === g).map((x) => x.nombre) })), mayores: MAYORES, tareas: TAREAS,
         trabajadores: (t.data ?? []).map((x) => {
           const codigo = x.codigo ?? PREFIJO.exec(x.nombre)?.[1] ?? null;
-          return nombres ? { codigo, nombre: x.nombre.replace(PREFIJO, "") } : { codigo };
+          const fincas = (x.trabajadores_fincas ?? []).filter((a: any) => a.activo).map((a: any) => a.fincas?.nombre).filter(Boolean);
+          return { codigo, ...(nombres ? { nombre: x.nombre.replace(PREFIJO, "") } : {}), fincas_activas: fincas };
         }),
       });
     }
@@ -315,8 +335,8 @@ Deno.serve(async (req) => {
 
       let fincaIds: string[] | null = null;
       if (fincaTxt) {
-        const { data } = await admin.from("fincas").select("id").ilike("nombre", `%${fincaTxt}%`);
-        fincaIds = (data ?? []).map((x) => x.id);
+        const { data } = await admin.from("fincas").select("id,nombre");
+        fincaIds = (data ?? []).filter((x) => coincideFinca(x.nombre, fincaTxt)).map((x) => x.id);
         if (!fincaIds.length) return json({ error: `No hay ninguna finca que coincida con «${fincaTxt}»`, fincas_disponibles: ((await admin.from("fincas").select("nombre")).data ?? []).map((x) => x.nombre) }, 404);
       }
       let trabIds: string[] | null = null;
@@ -356,13 +376,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      const agrupar = ["trabajador", "dia", "mes", "mayor", "tarea", "finca"].includes(q("agrupar")) ? q("agrupar") : "trabajador";
+      const agrupar = ["trabajador", "dia", "mes", "mayor", "tarea", "finca", "grupo"].includes(q("agrupar")) ? q("agrupar") : "trabajador";
       const grupos = new Map<string, { clave: string; horas: number; extra: number; dias: Set<string>; registros: number }>();
       for (const p of filas) {
         const pp = per(p);
         const clave = agrupar === "trabajador" ? `${pp.codigo ? pp.codigo + " · " : ""}${pp.nombre}`
           : agrupar === "dia" ? p.fecha : agrupar === "mes" ? p.fecha.slice(0, 7) : agrupar === "mayor" ? p.mayor ?? "Sin clasificar"
-          : agrupar === "tarea" ? p.tipo_trabajo ?? "Sin tarea" : p.fincas?.nombre ?? "Sin finca";
+          : agrupar === "tarea" ? p.tipo_trabajo ?? "Sin tarea" : agrupar === "grupo" ? grupoFinca(p.fincas?.nombre ?? "") : p.fincas?.nombre ?? "Sin finca";
         const g = grupos.get(clave) ?? { clave, horas: 0, extra: 0, dias: new Set<string>(), registros: 0 };
         g.horas += Number(p.horas_totales ?? 0); g.extra += Number(p.horas_extra_totales ?? 0); g.dias.add(p.fecha); g.registros++;
         grupos.set(clave, g);

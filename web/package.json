@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:personal": "node --test tests/personal-fincas.test.mjs"
+    "test:personal": "node --test tests/personal-fincas.test.mjs",
+    "test:operativa": "node tests/run-operativa.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
