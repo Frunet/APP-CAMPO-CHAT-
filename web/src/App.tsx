@@ -15,7 +15,7 @@ import ImportarHoras from "./pages/ImportarHoras";
 import Costes from "./pages/Costes";
 
 const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" | "registro" }[] = [
-  { to: "/hoy", texto: "Hoy" },
+  { to: "/ayer", texto: "Ayer" },
   { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/calendario", texto: "🗓️ Calendario" }, { to: "/historial", texto: "📚 Historial", solo: "hist" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
   { to: "/revision", texto: "Revisión semanal" }, { to: "/importar", texto: "Importar Excel", solo: "registro" }, { to: "/costes", texto: "Costes", solo: "gestion" },
 ];
@@ -35,7 +35,7 @@ function Shell() {
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/revision" ? RevisionSemanal : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
+  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/revision" ? RevisionSemanal : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/ayer" || ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
   return (
     <div className="fr-fondo min-h-screen" style={fondo}>
       <header ref={medirCabecera} className="fr-cabecera sticky top-0 z-10">
@@ -43,7 +43,7 @@ function Shell() {
           <span className="fr-marca flex items-center gap-2"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="FRUNET" className="fr-logo" /><small>Control de fincas</small></span>
           <nav className="fr-nav flex flex-wrap gap-2 text-sm">
             {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : m.solo === "registro" ? puedeRegistrar : m.solo === "hist" ? (perfil.rol === "administrador" || perfil.rol === "encargado") : puedeGestionar)).map((m) => (
-              <Link key={m.to} to={m.to} className={`fr-pestana ${(ruta === m.to || (m.to === "/hoy" && ruta === "/")) ? "fr-pestana-activa" : ""}`}>{m.texto}</Link>
+              <Link key={m.to} to={m.to} className={`fr-pestana ${(ruta === m.to || (m.to === "/ayer" && (ruta === "/" || ruta === "/hoy"))) ? "fr-pestana-activa" : ""}`}>{m.texto}</Link>
             ))}
           </nav>
           <span className="fr-usuario ml-auto flex items-center gap-2 text-xs text-stone-600">

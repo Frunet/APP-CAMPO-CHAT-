@@ -9,7 +9,11 @@ import { partesPeriodo } from "../lib/leer-operativa";
 import { avisosHoras } from "../lib/operativa";
 export default function Hoy() {
   const { fincas } = useAuth();
-  const [dia, setDia] = useState(iso(new Date())), [grupo, setGrupo] = useState("");
+  const [dia, setDia] = useState(() => {
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    return iso(ayer);
+  }), [grupo, setGrupo] = useState("");
   const { datos, error, cargando } = useCarga(async () => {
     const [partes, personal, tareas, ultimos] = await Promise.all([
       partesPeriodo(dia, dia),
@@ -27,7 +31,7 @@ export default function Hoy() {
   const visibles = fincas.filter((f) => !grupo || grupoPersonal(f) === grupo);
   const avisos = avisosHoras((datos?.partes ?? []).filter((p) => visibles.some((f) => f.id === p.finca_id)));
   return <div className="mx-auto max-w-6xl space-y-4">
-    <h1 className="text-xl font-semibold">Hoy en las fincas</h1>
+    <h1 className="text-xl font-semibold">Ayer en las fincas</h1>
     <div className="card grid gap-3 sm:grid-cols-2"><Field label="Día"><input type="date" className="input" max={iso(new Date())} value={dia} onChange={(e) => setDia(e.target.value)} /></Field><Field label="Grupo"><select className="input" value={grupo} onChange={(e) => setGrupo(e.target.value)}><option value="">Todos</option>{GRUPOS_PERSONAL.map((g) => <option key={g}>{g}</option>)}</select></Field></div>
     {error && <p role="alert" className="card text-red-700">{error}</p>}
     {cargando && <p role="status">Cargando resumen…</p>}
