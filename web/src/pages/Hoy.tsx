@@ -6,7 +6,27 @@ import { Link } from "../router";
 import { fecha, iso, num } from "../lib/format";
 import { grupoPersonal, GRUPOS_PERSONAL } from "../lib/grupos-personal";
 import { partesPeriodo } from "../lib/leer-operativa";
-import { avisosHoras } from "../lib/operativa";
+import { avisosHoras, type ParteOperativo } from "../lib/operativa";
+
+function TrabajosRealizados({ partes }: { partes: ParteOperativo[] }) {
+  const tareas = new Map<string, { tarea: string; mayor: string; detalle: string; horas: number }>();
+  for (const p of partes) {
+    const tarea = p.tipo_trabajo?.trim() || p.mayor?.trim() || "Sin tarea especificada";
+    const mayor = p.mayor?.trim() || "", detalle = p.actividad?.trim() || "";
+    const clave = JSON.stringify([mayor, tarea, detalle]);
+    const fila = tareas.get(clave) ?? { tarea, mayor, detalle, horas: 0 };
+    fila.horas += Number(p.horas_totales); tareas.set(clave, fila);
+  }
+  return <div className="space-y-2 border-t border-stone-200 pt-3">
+    <h3 className="text-sm font-bold">Trabajos realizados</h3>
+    <ul className="space-y-2">{[...tareas.entries()].map(([clave, t]) => <li key={clave} className="rounded-lg bg-stone-50 p-2 text-sm">
+      {t.mayor && t.mayor !== t.tarea && <p className="text-xs text-stone-500">{t.mayor}</p>}
+      <div className="flex items-start justify-between gap-2"><p className="min-w-0 break-words font-semibold">{t.tarea}</p><span className="shrink-0 font-semibold">{num(t.horas, 2)} h</span></div>
+      {t.detalle && <p className="mt-1 whitespace-pre-wrap break-words text-stone-600">{t.detalle}</p>}
+    </li>)}</ul>
+    <p className="text-xs text-stone-500">Horas de personal sumadas por tarea y detalle.</p>
+  </div>;
+}
 export default function Hoy() {
   const { fincas } = useAuth();
   const [dia, setDia] = useState(() => {
@@ -41,7 +61,7 @@ export default function Hoy() {
         const activos = datos.personal.filter((t) => t.trabajadores_fincas.some((a) => a.finca_id === f.id && a.activo));
         const pendientes = datos.tareas.filter((t) => t.finca_id === f.id);
         const ultimo = datos.ultimos.find((p) => p.finca_id === f.id)?.fecha;
-        return <section key={f.id} className="card space-y-2"><p className="text-xs text-stone-500">{grupoPersonal(f)}</p><h2 className="font-bold">{f.nombre}</h2><p className="text-2xl font-bold text-brand-700">{num(pp.reduce((s, p) => s + Number(p.horas_totales), 0), 1)} h</p><p className="text-sm">{registrados.size} trabajadores con horas · {activos.length} activos actualmente</p><p className="text-sm">{pendientes.length} tareas pendientes hasta este día o sin fecha</p><p className="text-xs text-stone-500">Último registro: {ultimo ? fecha(ultimo) : "sin registros"}</p>{pp.length === 0 && <p className="text-sm text-amber-700">Sin registro este día</p>}<Link to="/horas" className="text-sm font-bold text-brand-700 underline">Registrar horas</Link></section>;
+        return <section key={f.id} className="card space-y-2"><p className="text-xs text-stone-500">{grupoPersonal(f)}</p><h2 className="font-bold">{f.nombre}</h2><p className="text-2xl font-bold text-brand-700">{num(pp.reduce((s, p) => s + Number(p.horas_totales), 0), 1)} h</p><p className="text-sm">{registrados.size} trabajadores con horas · {activos.length} activos actualmente</p><p className="text-sm">{pendientes.length} tareas pendientes hasta este día o sin fecha</p><p className="text-xs text-stone-500">Último registro: {ultimo ? fecha(ultimo) : "sin registros"}</p>{pp.length === 0 && <p className="text-sm text-amber-700">Sin registro este día</p>}{pp.length > 0 && <TrabajosRealizados partes={pp} />}<Link to="/horas" className="inline-block text-sm font-bold text-brand-700 underline">Registrar horas</Link></section>;
       })}</div>
       <p className="text-xs text-stone-600">Sin registro no significa ausencia. Las tareas mostradas dependen de los permisos del calendario de tu usuario.</p>
       {avisos.length > 0 && <section className="card"><h2 className="font-bold">Datos para revisar</h2><ul className="list-disc pl-5 text-sm">{avisos.map((a) => <li key={a}>{a}</li>)}</ul></section>}
