@@ -9,17 +9,18 @@ import { partesPeriodo } from "../lib/leer-operativa";
 import RevisionImportacion, { type TrabImportacion } from "../components/RevisionImportacion";
 import type { ParteOperativo } from "../lib/operativa";
 export default function ImportarHoras() {
-  const { fincas, puedeRegistrar, cargando: authCargando } = useAuth();
+  const { fincas, esAdmin, cargando: authCargando } = useAuth();
   const hoy = iso(new Date());
   const [desde, setDesde] = useState(hoy.slice(0, 7) + "-01"), [hasta, setHasta] = useState(hoy);
   const [cargando, setCargando] = useState(false), [error, setError] = useState(""), [nota, setNota] = useState("");
   const [revision, setRevision] = useState<{ id: number; lineas: LineaImportacion[]; existentes: ParteOperativo[] } | null>(null);
   const personal = useCarga(async () => {
+    if (!esAdmin) return [] as TrabImportacion[];
     const r = await db.from("trabajadores").select("id,codigo,nombre,activo,trabajadores_fincas(finca_id,activo)").eq("activo", true).order("nombre");
     if (r.error) throw new Error(r.error.message); return r.data as TrabImportacion[];
-  }, []);
+  }, [esAdmin]);
   async function leer(files: FileList | null) {
-    if (!files?.length) return;
+    if (!esAdmin || !files?.length) return;
     setCargando(true); setError(""); setRevision(null); setNota("");
     try {
       if (!desde || !hasta || hasta < desde || hasta > hoy) throw new Error("Elige un periodo válido hasta hoy antes de subir los archivos.");
@@ -47,7 +48,7 @@ export default function ImportarHoras() {
     setCargando(false);
   }
   if (authCargando) return null;
-  if (!puedeRegistrar) return <Navigate to="/historial" />;
+  if (!esAdmin) return <Navigate to="/ayer" />;
   return <div className="mx-auto max-w-7xl space-y-4"><h1 className="text-xl font-semibold">Importar horas de Excel</h1>
     <p className="text-sm">Admite las hojas de FRUNET, LOMAS y PAI y la exportación del Historial. Si existe una hoja DATOS, se utiliza esa hoja; no se importan los resúmenes. No se cambian las fichas, las tarifas ni las fincas activas.</p>
     <div className="card grid gap-3 sm:grid-cols-3"><Field label="Desde"><input className="input" type="date" value={desde} onChange={(e) => { setDesde(e.target.value); setRevision(null); }} /></Field><Field label="Hasta"><input className="input" type="date" max={hoy} value={hasta} onChange={(e) => { setHasta(e.target.value); setRevision(null); }} /></Field><Field label="Archivos Excel"><input type="file" accept=".xlsx,.xls" multiple disabled={cargando || personal.cargando || !!personal.error} onChange={(e) => { leer(e.target.files); e.target.value = ""; }} /></Field></div>

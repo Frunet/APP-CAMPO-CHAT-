@@ -13,10 +13,10 @@ import Hoy from "./pages/Hoy";
 import ImportarHoras from "./pages/ImportarHoras";
 import Costes from "./pages/Costes";
 
-const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" | "registro" }[] = [
+const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" }[] = [
   { to: "/ayer", texto: "Ayer" },
   { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/calendario", texto: "🗓️ Calendario" }, { to: "/historial", texto: "📚 Historial", solo: "hist" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
-  { to: "/importar", texto: "Importar Excel", solo: "registro" }, { to: "/costes", texto: "Costes", solo: "gestion" },
+  { to: "/importar", texto: "Importar Excel", solo: "admin" }, { to: "/costes", texto: "Costes", solo: "gestion" },
 ];
 
 /** Guarda la altura de la cabecera (--cab-h) para que Horas ocupe justo el resto de la pantalla. Función estable: se ejecuta una sola vez. */
@@ -28,7 +28,7 @@ function medirCabecera(el: HTMLElement | null) {
 }
 
 function Shell() {
-  const { cargando, session, perfil, puedeGestionar, puedeRegistrar, esAdmin } = useAuth();
+  const { cargando, session, perfil, puedeGestionar, esAdmin } = useAuth();
   const ruta = useRuta();
   if (cargando) return <p className="mt-[30vh] text-center text-stone-500">Cargando…</p>;
   if (!session) return <Login />;
@@ -41,7 +41,7 @@ function Shell() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
           <span className="fr-marca flex items-center gap-2"><img src={`${import.meta.env.BASE_URL}logo.png`} alt="FRUNET" className="fr-logo" /><small>Control de fincas</small></span>
           <nav className="fr-nav flex flex-wrap gap-2 text-sm">
-            {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : m.solo === "registro" ? puedeRegistrar : m.solo === "hist" ? (perfil.rol === "administrador" || perfil.rol === "encargado") : puedeGestionar)).map((m) => (
+            {MENU.filter((m) => !m.solo || (m.solo === "admin" ? esAdmin : m.solo === "hist" ? (perfil.rol === "administrador" || perfil.rol === "encargado") : puedeGestionar)).map((m) => (
               <Link key={m.to} to={m.to} className={`fr-pestana ${(ruta === m.to || (m.to === "/ayer" && (ruta === "/" || ruta === "/hoy"))) ? "fr-pestana-activa" : ""}`}>{m.texto}</Link>
             ))}
           </nav>
