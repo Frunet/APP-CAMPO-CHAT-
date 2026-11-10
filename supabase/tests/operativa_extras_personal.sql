@@ -1,4 +1,4 @@
--- Ejecutar solo en una base aislada con las migraciones 0001-0030 aplicadas.
+-- Ejecutar solo en una base aislada con las migraciones 0001-0031 aplicadas.
 -- Todo se revierte al terminar; no usar con datos reales.
 begin;
 grant select,insert,update,delete on all tables in schema public to authenticated;
@@ -37,8 +37,21 @@ begin
  perform public.importar_horas_revisadas(jsonb_build_array(jsonb_build_object('fecha','2026-10-03','finca_id',f1,'trabajador_id',t,'horas_por_trabajador',7.5,'horas_extra_por_trabajador',0,'mayor','Otros','tipo_trabajo','Otros')));
  if (select count(*) from public.partes_trabajo where fecha='2026-10-03' and trabajador_id=t)<>1 then raise exception 'Reimportación duplicada con extras automáticas';end if;
 end $$;
+insert into public.trabajadores(id,finca_id,nombre,codigo,activo) values('93000000-0000-0000-0000-000000000003','92000000-0000-0000-0000-000000000002','Disponible de otra finca','EXTRA3',true);
 set role authenticated;
 select set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000002',false);
+do $$declare catalogo jsonb;begin
+ if exists(select 1 from public.trabajadores where id='93000000-0000-0000-0000-000000000003') then raise exception 'El trabajador externo ya era visible por la consulta normal';end if;
+ select to_jsonb(p) into catalogo from public.listar_personal_disponible() p where p.id='93000000-0000-0000-0000-000000000003';
+ if catalogo is null then raise exception 'El catálogo no incluye los activos de otras fincas';end if;
+ if catalogo ? 'coste_hora' or catalogo->'trabajadores_fincas'<>'[]'::jsonb then raise exception 'Expuso tarifas o asignaciones ajenas';end if;
+ if exists(select 1 from public.listar_personal_disponible() where id='93000000-0000-0000-0000-000000000002') then raise exception 'Incluyó una baja general';end if;
+end $$;
+select public.cambiar_actividad_trabajador_finca('93000000-0000-0000-0000-000000000003','92000000-0000-0000-0000-000000000001',true);
+do $$begin
+ if not (select activo from public.trabajadores_fincas where trabajador_id='93000000-0000-0000-0000-000000000003' and finca_id='92000000-0000-0000-0000-000000000001') then raise exception 'No asignó el trabajador externo a la finca propia';end if;
+end $$;
+select public.cambiar_actividad_trabajador_finca('93000000-0000-0000-0000-000000000003','92000000-0000-0000-0000-000000000001',false);
 select public.cambiar_actividad_trabajador_finca('93000000-0000-0000-0000-000000000001','92000000-0000-0000-0000-000000000001',false);
 do $$begin
  if (select activo from public.trabajadores_fincas where trabajador_id='93000000-0000-0000-0000-000000000001' and finca_id='92000000-0000-0000-0000-000000000001') then raise exception 'No desactivó en la finca propia';end if;
@@ -61,6 +74,7 @@ do $$begin
 end $$;
 reset role;
 do $$begin
+ if not (select activo from public.trabajadores_fincas where trabajador_id='93000000-0000-0000-0000-000000000003' and finca_id='92000000-0000-0000-0000-000000000002') then raise exception 'Alteró la finca de origen del trabajador externo';end if;
  if not (select activo from public.trabajadores_fincas where trabajador_id='93000000-0000-0000-0000-000000000001' and finca_id='92000000-0000-0000-0000-000000000002') then raise exception 'Alteró la otra finca';end if;
 end $$;
 rollback;
