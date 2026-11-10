@@ -10,14 +10,13 @@ import Ultimos7 from "./pages/Ultimos7";
 import Historial from "./pages/Historial";
 import Calendario from "./pages/Calendario";
 import Hoy from "./pages/Hoy";
-import RevisionSemanal from "./pages/RevisionSemanal";
 import ImportarHoras from "./pages/ImportarHoras";
 import Costes from "./pages/Costes";
 
 const MENU: { to: string; texto: string; solo?: "gestion" | "admin" | "hist" | "registro" }[] = [
   { to: "/ayer", texto: "Ayer" },
   { to: "/horas", texto: "⏱️ Horas" }, { to: "/ultimos7", texto: "📅 Últimos 7 días" }, { to: "/calendario", texto: "🗓️ Calendario" }, { to: "/historial", texto: "📚 Historial", solo: "hist" }, { to: "/nominas", texto: "🧾 Nóminas", solo: "gestion" }, { to: "/maestros", texto: "🗂️ Maestros", solo: "admin" },
-  { to: "/revision", texto: "Revisión semanal" }, { to: "/importar", texto: "Importar Excel", solo: "registro" }, { to: "/costes", texto: "Costes", solo: "gestion" },
+  { to: "/importar", texto: "Importar Excel", solo: "registro" }, { to: "/costes", texto: "Costes", solo: "gestion" },
 ];
 
 /** Guarda la altura de la cabecera (--cab-h) para que Horas ocupe justo el resto de la pantalla. Función estable: se ejecuta una sola vez. */
@@ -35,7 +34,7 @@ function Shell() {
   if (!session) return <Login />;
   if (!perfil) return <p className="mt-[30vh] text-center text-stone-500">Tu usuario no tiene perfil activo. Habla con el administrador.</p>;
 
-  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/revision" ? RevisionSemanal : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/ayer" || ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
+  const Pagina = ruta === "/nominas" ? Nominas : ruta === "/maestros" ? Maestros : ruta === "/ultimos7" ? Ultimos7 : ruta === "/historial" ? Historial : ruta === "/calendario" ? Calendario : ruta === "/importar" ? ImportarHoras : ruta === "/costes" ? Costes : ruta === "/ayer" || ruta === "/hoy" || ruta === "/" ? Hoy : Horas;
   return (
     <div className="fr-fondo min-h-screen" style={fondo}>
       <header ref={medirCabecera} className="fr-cabecera sticky top-0 z-10">
