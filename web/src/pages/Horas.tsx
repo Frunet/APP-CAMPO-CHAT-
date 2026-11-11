@@ -6,6 +6,7 @@ import { CAMPOS_HORAS, MAX_HORAS_DIA } from "../lib/horas";
 import { registrarHoras } from "../lib/registrarHoras";
 import { iso } from "../lib/format";
 import { activoEnFinca, fincasActivas, type AsignacionFinca } from "../lib/personal-fincas";
+import Caja from "../components/CajaHoras";
 import RepetirDia from "../components/RepetirDia";
 
 type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
@@ -13,17 +14,6 @@ type Variedad = { id: string; cultivo: string; variedad: string | null };
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : 0; };
 const vacias = () => CAMPOS_HORAS.map(() => "");
 const es = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 });
-
-/** Etiqueta compacta de dos líneas: el mayor (pequeño) y la tarea. */
-function Caja({ mayor, tarea, children }: { mayor?: string; tarea: string; children: React.ReactNode }) {
-  return (
-    <label className="block min-w-0">
-      {mayor && <span className="hidden truncate text-[10px] font-bold uppercase leading-tight text-brand-700 sm:block">{mayor}</span>}
-      <span className="mb-0.5 line-clamp-2 block min-h-[1.9em] text-[11px] font-semibold leading-tight text-stone-700 sm:text-xs">{tarea}</span>
-      {children}
-    </label>
-  );
-}
 
 /**
  * En móvil: finca y fecha, trabajadores amplios y después las horas; la página puede desplazarse.

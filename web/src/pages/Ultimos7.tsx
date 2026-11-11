@@ -1,12 +1,13 @@
 import { Fragment, useState } from "react";
 import { useAuth } from "../auth";
 import { db } from "../supabase";
-import { Field, msgError, useCarga } from "../ui";
+import { msgError, useCarga } from "../ui";
+import EditarHoras from "../components/EditarHoras";
 import { CAMPOS_HORAS } from "../lib/horas";
 import { fecha, iso, num } from "../lib/format";
 
-type Parte = {
-  id: string; fecha: string; finca_id: string; mayor: string | null; tipo_trabajo: string | null; actividad: string | null; num_trabajadores: number;
+export type Parte = {
+  id: string; updated_at: string; fecha: string; finca_id: string; mayor: string | null; tipo_trabajo: string | null; actividad: string | null; num_trabajadores: number;
   horas_por_trabajador: number; horas_extra_por_trabajador: number; horas_extra_manuales: number; horas_totales: number; trabajador_id: string | null; trabajador_nombre: string | null;
   trabajadores: { codigo: string | null; nombre: string } | null; fincas: { nombre: string } | null;
 };
@@ -14,95 +15,7 @@ type Tractor = { id: string; fecha: string; horas: number; observaciones: string
 
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : NaN; };
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const KEEP = "keep";
-
-/** Campo de horas que corresponde a la tarea (y subtipo) de un parte; «keep» si la tarea es antigua y no está en el catálogo. */
-function campoDe(p: Parte): { sel: string; obs: string } {
-  const i = CAMPOS_HORAS.findIndex((c) => c.tarea === p.tipo_trabajo && (!c.subtipo || (p.actividad ?? "").startsWith(c.subtipo)));
-  if (i < 0) return { sel: KEEP, obs: p.actividad ?? "" };
-  const c = CAMPOS_HORAS[i];
-  const obs = c.subtipo ? (p.actividad ?? "").slice(c.subtipo.length).replace(/^\s*·\s*/, "") : p.actividad ?? "";
-  return { sel: String(i), obs };
-}
 const nombreDe = (p: Parte) => p.trabajadores?.nombre ?? p.trabajador_nombre ?? (p.num_trabajadores > 1 ? `Sin nombre (${p.num_trabajadores} personas)` : "Sin nombre");
-
-/** Una línea de horas (un parte): se puede modificar (tarea, horas, extra, observaciones) o eliminar. */
-function FilaParte({ p, alCambiar }: { p: Parte; alCambiar: () => void }) {
-  const ini = campoDe(p);
-  const [editando, setEditando] = useState(false);
-  const [sel, setSel] = useState(ini.sel);
-  const [horas, setHoras] = useState(String(p.horas_por_trabajador));
-  const [extra, setExtra] = useState(String(p.horas_extra_manuales || ""));
-
-  const [obs, setObs] = useState(ini.obs);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState(false);
-  const nombre = nombreDe(p);
-
-  async function guardar() {
-    const h = dec(horas);
-    if (!(h > 0 && h <= 24)) return setMsg("Las horas deben estar entre 0 y 24");
-    const e = extra.trim() ? dec(extra) : 0;
-    if (!(e >= 0 && e <= h)) return setMsg("Las extras manuales deben estar entre cero y las horas del parte");
-
-    const cambios: Record<string, unknown> = { horas_por_trabajador: h, horas_extra_manuales: e };
-    if (sel === KEEP) cambios.actividad = obs.trim() || null;
-    else { const c = CAMPOS_HORAS[Number(sel)]; cambios.tipo_trabajo = c.tarea; cambios.mayor = c.mayor; cambios.actividad = [c.subtipo, obs.trim()].filter(Boolean).join(" · ") || null; }
-    setOcupado(true); setMsg(null);
-    const { data, error } = await db.from("partes_trabajo").update(cambios).eq("id", p.id).select("id");
-    setOcupado(false);
-    if (error) return setMsg(msgError(error));
-    if (!data?.length) return setMsg("No se pudo modificar (¿no tienes permiso sobre esta finca?)");
-    setEditando(false); alCambiar();
-  }
-  async function eliminar() {
-    if (!window.confirm(`¿Eliminar las ${num(p.horas_totales, 2)} h de ${nombre} del ${fecha(p.fecha)} (${p.tipo_trabajo ?? "sin tarea"})?`)) return;
-    setOcupado(true);
-    const { data, error } = await db.from("partes_trabajo").delete().eq("id", p.id).select("id");
-    setOcupado(false);
-    if (error) return setMsg(msgError(error));
-    if (!data?.length) return setMsg("No se pudo eliminar (solo se pueden borrar los registros de los últimos 7 días de tus fincas)");
-    alCambiar();
-  }
-
-  if (!editando) {
-    return (
-      <tr>
-        <td className="td font-mono text-xs">{p.trabajadores?.codigo ?? "—"}</td><td className="td">{nombre}</td><td className="td">{p.fincas?.nombre}</td>
-        <td className="td">{p.tipo_trabajo ?? "—"}{p.actividad && <span className="block text-xs text-stone-500">{p.actividad}</span>}</td>
-        <td className="td whitespace-nowrap">{num(p.horas_totales, 2)}{Number(p.horas_extra_por_trabajador) > 0 && <span className="text-xs text-amber-700"> ({num(p.horas_extra_por_trabajador * p.num_trabajadores, 2)} extra)</span>}</td>
-        <td className="td whitespace-nowrap text-right">
-          <button type="button" className="text-sm text-brand-700 underline" onClick={() => setEditando(true)}>Editar</button>{" · "}
-          <button type="button" className="text-sm text-red-600 underline disabled:opacity-50" disabled={ocupado} onClick={eliminar}>Eliminar</button>
-          {msg && <span role="alert" className="block text-xs text-red-600">{msg}</span>}
-        </td>
-      </tr>
-    );
-  }
-  return (
-    <tr className="bg-amber-50/60">
-      <td className="td font-mono text-xs">{p.trabajadores?.codigo ?? "—"}</td><td className="td">{nombre}</td><td className="td">{p.fincas?.nombre}</td>
-      <td className="td" colSpan={3}>
-        <div className="grid gap-2 sm:grid-cols-4">
-          <Field label="Tarea">
-            <select className="input" value={sel} onChange={(e) => setSel(e.target.value)}>
-              {ini.sel === KEEP && <option value={KEEP}>Mantener: {p.tipo_trabajo ?? "sin tarea"}</option>}
-              {CAMPOS_HORAS.map((c, i) => c.cosecha && ini.sel !== String(i) ? null : <option key={c.etiqueta} value={i}>{c.etiqueta}</option>)}
-            </select>
-          </Field>
-          <Field label="Horas"><input inputMode="decimal" className="input" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
-          <Field label="De ellas, extras manuales"><input inputMode="decimal" className="input" value={extra} onChange={e=>setExtra(e.target.value)} /><small>Incluidas en las horas del parte. Se respeta el mínimo automático de la jornada, sin duplicarlas.</small></Field>
-          <Field label="Observaciones"><input className="input" maxLength={400} value={obs} onChange={(e) => setObs(e.target.value)} /></Field>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button type="button" className="btn !py-1" disabled={ocupado} onClick={guardar}>{ocupado ? "Guardando…" : "Guardar"}</button>
-          <button type="button" className="btn-ghost !py-1" onClick={() => { setEditando(false); setMsg(null); }}>Cancelar</button>
-          {msg && <span role="alert" className="text-xs text-red-600">{msg}</span>}
-        </div>
-      </td>
-    </tr>
-  );
-}
 
 /** Fila de tractor con el mismo aspecto que la tabla verde. */
 function FilaTractor({ t, editable, alCambiar }: { t: Tractor; editable: boolean; alCambiar: () => void }) {
@@ -153,36 +66,22 @@ const IconoEditar = () => (
 
 type Fila = { clave: string; nombre: string; codigo: string | null; finca: string; total: number; extra: number; por: Map<string, number>; lineas: Parte[] };
 
-/** Líneas de un trabajador en el día elegido, para modificarlas o eliminarlas (en la tabla y en la tarjeta del móvil). */
-function Detalle({ f, alCambiar, eliminarTodo }: { f: Fila; alCambiar: () => void; eliminarTodo: (f: Fila) => void }) {
-  return (
-    <>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead><tr>{["Código", "Trabajador", "Finca", "Tarea", "Horas", ""].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-stone-100">{f.lineas.map((l) => <FilaParte key={l.id} p={l} alCambiar={alCambiar} />)}</tbody>
-        </table>
-      </div>
-      <button type="button" className="mt-2 text-sm text-red-600 underline" onClick={() => eliminarTodo(f)}>Eliminar todo lo de {f.nombre} este día</button>
-    </>
-  );
-}
-
 /**
  * Revisión de lo registrado en los últimos 7 días, con el aspecto de AppCampo/Frunet: eliges el día y ves una fila por trabajador
- * con sus horas por subtarea; el lápiz abre sus líneas para corregirlas o eliminarlas.
+ * con sus horas por subtarea; el lápiz abre el formulario de horas cargado con sus tareas actuales.
  */
 export default function Ultimos7() {
   const { puedeRegistrar } = useAuth();
   const hoy = new Date();
   const desde = iso(new Date(hoy.getTime() - 6 * 864e5)), hasta = iso(hoy);
   const [dia, setDia] = useState("");
-  const [abierto, setAbierto] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Fila | null>(null);
+  const [aviso, setAviso] = useState("");
 
   const { datos, error, cargando, recargar } = useCarga(async () => {
     const [a, b] = await Promise.all([
       db.from("partes_trabajo")
-        .select("id,fecha,finca_id,mayor,tipo_trabajo,actividad,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,horas_extra_manuales,horas_totales,trabajador_id,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
+        .select("id,updated_at,fecha,finca_id,mayor,tipo_trabajo,actividad,num_trabajadores,horas_por_trabajador,horas_extra_por_trabajador,horas_extra_manuales,horas_totales,trabajador_id,trabajador_nombre,trabajadores(codigo,nombre),fincas(nombre)")
         .gte("fecha", desde).lte("fecha", hasta).order("created_at", { ascending: false }).limit(2000),
       db.from("horas_tractor").select("id,fecha,horas,observaciones,fincas(nombre)").gte("fecha", desde).lte("fecha", hasta),
     ]);
@@ -210,17 +109,17 @@ export default function Ultimos7() {
   const lista = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   const cols = lista.some((f) => f.por.has(SIN_MAYOR)) ? [...COLUMNAS, { clave: SIN_MAYOR }] : COLUMNAS;
   const celda = (v?: number) => (v ? <b>{num(v, 2)}</b> : <span className="text-stone-300">0</span>);
-  const anchoTabla = 4 + cols.length;
 
   async function eliminarTodo(f: Fila) {
     if (!window.confirm(`¿Eliminar TODAS las líneas de ${f.nombre} del ${fecha(elegido)} en ${f.finca} (${num(f.total, 2)} h)?`)) return;
     const { error } = await db.from("partes_trabajo").delete().in("id", f.lineas.map((l) => l.id));
     if (error) return window.alert(msgError(error));
-    setAbierto(null); recargar();
+    setEditando(null); recargar();
   }
 
   return (
     <div>
+      {editando && <EditarHoras lineas={editando.lineas} nombre={editando.nombre} finca={editando.finca} actualizar={recargar} cerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); setAviso("Horas modificadas correctamente."); recargar(); }} eliminar={() => eliminarTodo(editando)} />}
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -230,7 +129,7 @@ export default function Ultimos7() {
                 const h = partes.filter((p) => p.fecha === d).reduce((a, p) => a + Number(p.horas_totales ?? 0), 0);
                 const f = new Date(d + "T00:00:00");
                 return (
-                  <button key={d} type="button" className={`fr-dia ${d === elegido ? "fr-dia-activo" : ""} ${!dias.includes(d) ? "fr-dia-vacio" : ""}`} onClick={() => { setDia(d); setAbierto(null); }}>
+                  <button key={d} type="button" className={`fr-dia ${d === elegido ? "fr-dia-activo" : ""} ${!dias.includes(d) ? "fr-dia-vacio" : ""}`} onClick={() => { setDia(d); setEditando(null); }}>
                     <span>{DIAS[f.getDay()].slice(0, 3)} {f.getDate()}/{f.getMonth() + 1}</span>
                     <small>{dias.includes(d) ? `${num(h, 0)} h` : "sin datos"}</small>
                   </button>
@@ -241,6 +140,7 @@ export default function Ultimos7() {
           {puedeRegistrar && <a href="#/horas" className="fr-boton">Pulse aquí para añadir horas</a>}
         </div>
 
+        {aviso && <p role="status" className="card text-green-800">{aviso}</p>}
         {error && <p role="alert" className="rounded bg-white px-3 py-2 text-sm text-red-600">{error}</p>}
         {cargando && !datos && <p className="fr-etiqueta">Cargando…</p>}
         {!dias.length && !cargando && <p className="rounded bg-white/90 px-3 py-2 text-sm">No hay registros en los últimos 7 días ({fecha(desde)} – {fecha(hasta)}).</p>}
@@ -267,7 +167,7 @@ export default function Ultimos7() {
                     <tr>
                       <td className="text-center">
                         {puedeRegistrar
-                          ? <button type="button" title="Modificar o eliminar" aria-label={`Modificar o eliminar ${f.nombre}`} className="fr-lapiz" onClick={() => setAbierto(abierto === f.clave ? null : f.clave)}><IconoEditar /></button>
+                          ? <button type="button" title="Editar horas de" aria-label={`Editar horas de ${f.nombre}`} className="fr-lapiz" onClick={() => setEditando(f)}><IconoEditar /></button>
                           : <span className="text-stone-300">—</span>}
                       </td>
                       <td className="text-left">{f.nombre}{f.codigo && <span> ({f.codigo})</span>}</td>
@@ -275,13 +175,6 @@ export default function Ultimos7() {
                       <td className="text-left">{f.finca}</td>
                       {cols.map((c) => <td key={c.clave}>{celda(f.por.get(c.clave))}</td>)}
                     </tr>
-                    {abierto === f.clave && (
-                      <tr>
-                        <td colSpan={anchoTabla} className="!bg-white/95 !p-3 text-left">
-                          <Detalle f={f} alCambiar={recargar} eliminarTodo={eliminarTodo} />
-                        </td>
-                      </tr>
-                    )}
                   </Fragment>
                 ))}
                 <tr className="fr-total">
@@ -301,12 +194,12 @@ export default function Ultimos7() {
                     <p className="font-extrabold">{f.nombre}{f.codigo && <span className="font-semibold text-stone-500"> ({f.codigo})</span>}</p>
                     <p className="text-sm text-stone-600">{f.finca} · <b className="text-base text-stone-900">{num(f.total, 2)} h</b>{f.extra > 0 && <span className="text-amber-700"> ({num(f.extra, 2)} extra)</span>}</p>
                   </div>
-                  {puedeRegistrar && <button type="button" aria-label={`Modificar o eliminar ${f.nombre}`} className="fr-lapiz" onClick={() => setAbierto(abierto === f.clave ? null : f.clave)}><IconoEditar /></button>}
+                  {puedeRegistrar && <button type="button" aria-label={`Editar horas de ${f.nombre}`} className="fr-lapiz" onClick={() => setEditando(f)}><IconoEditar /></button>}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {cols.filter((c) => f.por.get(c.clave)).map((c) => <span key={c.clave} className="fr-chip">{c.clave} <b>{num(f.por.get(c.clave), 2)}</b></span>)}
                 </div>
-                {abierto === f.clave && <div className="mt-3 border-t border-stone-200 pt-3"><Detalle f={f} alCambiar={recargar} eliminarTodo={eliminarTodo} /></div>}
+
               </div>
             ))}
             <div className="card flex items-center justify-between font-extrabold" style={{ background: "#e8f6e7" }}>
