@@ -66,7 +66,7 @@ textarea.input { border-radius: .9rem; }
 .fr-chip { border: 1px solid #118a11; border-radius: 9999px; background: #e8f6e7; padding: .15rem .6rem; font-size: .8rem; }
 .fr-total td { background: #e8f6e7; font-weight: 800; }
 
-/* Horas: campos fijos, solo se desplaza la lista de trabajadores */
+/* Horas: dos columnas en ordenador; en móvil la lista tiene su propio espacio. */
 .input-sm { padding: .3rem .7rem; }
 .fr-lleno { background: #e8f6e7; }
 .fr-horas-pagina { display: flex; flex-direction: column; height: calc(100dvh - var(--cab-h, 4rem) - 2.5rem); min-height: 34rem; }
@@ -77,10 +77,19 @@ textarea.input { border-radius: .9rem; }
 .fr-horas-scroll { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid #118a11; border-radius: .75rem; background: #fff; }
 .fr-horas-barra { display: flex; flex: none; align-items: center; gap: .75rem; border-top: 2px solid #118a11; padding-top: .6rem; }
 @media (min-width: 1024px) {
-  .fr-horas { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-rows: minmax(0, 1fr) auto; gap: .75rem 1rem; }
-  .fr-horas-lista { grid-column: 1; grid-row: 1; min-height: 0; }
-  .fr-horas-campos { grid-column: 2; grid-row: 1; overflow-y: auto; }
-  .fr-horas-barra { grid-column: 1 / -1; grid-row: 2; }
+  .fr-horas { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: .75rem 1rem; }
+  .fr-horas-contexto { grid-column: 2; grid-row: 1; }
+  .fr-horas-lista { grid-column: 1; grid-row: 1 / 3; min-height: 0; }
+  .fr-horas-campos { grid-column: 2; grid-row: 2; overflow-y: auto; }
+  .fr-horas-barra { grid-column: 1 / -1; grid-row: 3; }
+}
+@media (max-width: 1023px) {
+  .fr-horas-pagina { height: auto; min-height: 0; }
+  .fr-horas-contexto { order: 0; }
+  .fr-horas-lista { order: 1; flex: none; min-height: 0; }
+  .fr-horas-scroll { flex: none; height: clamp(14rem, 45dvh, 26rem); -webkit-overflow-scrolling: touch; }
+  .fr-horas-campos { order: 2; }
+  .fr-horas-barra { order: 3; position: sticky; bottom: 0; z-index: 5; background: #fff; border-radius: .75rem; padding: .6rem .5rem calc(.6rem + env(safe-area-inset-bottom)); box-shadow: 0 -.25rem .75rem #00000012; }
 }
 
 /* Móvil */
@@ -101,5 +110,4 @@ textarea.input { border-radius: .9rem; }
 @media (max-width: 640px) {
   .input-sm { padding: .15rem .45rem; min-height: 2.1rem; font-size: 16px; }
   .fr-horas-card { padding: .5rem; }
-  .fr-horas-lista { min-height: 9rem; }
 }

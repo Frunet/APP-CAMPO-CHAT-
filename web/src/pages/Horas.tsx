@@ -26,8 +26,8 @@ function Caja({ mayor, tarea, children }: { mayor?: string; tarea: string; child
 }
 
 /**
- * Registro de horas. Los campos (finca, fecha, horas por tarea, tractor, extra) y el botón Añadir se quedan fijos en pantalla;
- * lo único que se desplaza es la lista de trabajadores. En el ordenador, la lista a la izquierda y los campos a la derecha.
+ * En móvil: finca y fecha, trabajadores amplios y después las horas; la página puede desplazarse.
+ * En ordenador: lista a la izquierda y campos a la derecha, con desplazamiento independiente.
  */
 function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab[]; variedades: Variedad[]; alGuardar: () => void }) {
   const { fincas } = useAuth();
@@ -82,13 +82,11 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
 
   return (
     <><form onSubmit={enviar} className="fr-horas">
-      {/* Campos: fijos */}
-      <section className="fr-horas-campos space-y-2">
-        <div className="grid grid-cols-2 gap-2">
+      <section aria-label="Finca y fecha" className="fr-horas-contexto grid grid-cols-2 gap-2">
           <Caja tarea="Finca *"><select className="input input-sm" required value={fincaEf} onChange={(e) => setFinca(e.target.value)}><option value="">Elige…</option>{fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}</select></Caja>
           <Caja tarea="Fecha *"><input type="date" className="input input-sm" required value={fechaD} max={hoy} onChange={(e) => setFecha(e.target.value)} /></Caja>
-        </div>
-
+      </section>
+      <section className="fr-horas-campos space-y-2">
         <button type="button" className="btn-ghost !py-1" disabled={!fincaEf || !fechaD || ocupado} onClick={() => setRepetir(true)}>Repetir el día anterior</button>
 
         <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
@@ -120,14 +118,14 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
         )}
       </section>
 
-      {/* Trabajadores: lo único que se desplaza */}
+      {/* En móvil la lista se muestra antes de las horas para que no quede comprimida al fondo. */}
       <section className="fr-horas-lista">
         <p className="mb-1.5 text-sm font-extrabold uppercase tracking-wide">Empleados <span className="font-semibold normal-case text-stone-600">({sel.length} marcado{sel.length === 1 ? "" : "s"})</span></p>
         <input className="input input-sm mb-2" placeholder="Buscar por código o nombre…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
         <div className="fr-horas-scroll">
           {visibles.map((t) => (
-            <label key={t.id} className={`flex cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-2.5 text-sm last:border-0 ${sel.includes(t.id) ? "bg-green-100 font-bold" : ""}`}>
-              <input type="checkbox" checked={sel.includes(t.id)} onChange={() => alternar(t.id)} className="h-5 w-5 shrink-0" />
+            <label key={t.id} className={`flex min-h-14 cursor-pointer items-center gap-3 border-b border-stone-100 px-3 py-3 text-base last:border-0 lg:min-h-0 lg:py-2.5 lg:text-sm ${sel.includes(t.id) ? "bg-green-100 font-bold" : ""}`}>
+              <input type="checkbox" checked={sel.includes(t.id)} onChange={() => alternar(t.id)} className="h-6 w-6 shrink-0 lg:h-5 lg:w-5" />
               <span className="min-w-0">{t.codigo && <span className="mr-1.5 font-mono text-xs text-stone-500">{t.codigo}</span>}{t.nombre}</span>
             </label>
           ))}
