@@ -11,6 +11,7 @@ import RepetirDia from "../components/RepetirDia";
 
 type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
 type Variedad = { id: string; cultivo: string; variedad: string | null };
+type Plantilla = { id: string; nombre: string; fincaId: string; horas: string[]; extra: string; tractor: string; actividad: string };
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : 0; };
 const vacias = () => CAMPOS_HORAS.map(() => "");
 const es = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 });
@@ -37,12 +38,16 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [ocupado, setOcupado] = useState(false);
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const [repetir, setRepetir] = useState(false);
+  const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
   useEffect(() => {
     if (!msg?.ok) return;
     const t = setTimeout(() => setMsg(null), 7000);
     return () => clearTimeout(t);
   }, [msg]);
   const fincaEf = finca || (fincas.length === 1 ? fincas[0].id : "");
+  useEffect(() => {
+    try { setPlantillas(JSON.parse(localStorage.getItem("campo_plantillas_horas") ?? "[]") as Plantilla[]); } catch { setPlantillas([]); }
+  }, []);
   useEffect(() => {
     const permitidos = new Set(trabajadores.filter((t) => fincaEf ? activoEnFinca(t, fincaEf) : fincasActivas(t).length > 0).map((t) => t.id));
     setSel((actual) => actual.every((id) => permitidos.has(id)) ? actual : actual.filter((id) => permitidos.has(id)));
@@ -57,6 +62,19 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const iCosecha = CAMPOS_HORAS.findIndex((c) => c.cosecha);
   const pedirForzar = !!msg?.error?.includes("igualmente"); // el servidor avisa de que alguien pasaría de 12 h con lo ya registrado
   const nombresSel = trabajadores.filter((t) => sel.includes(t.id)).map((t) => t.nombre);
+  const plantillasFinca = plantillas.filter((p) => !fincaEf || p.fincaId === fincaEf);
+  const cargarPlantilla = (id: string) => {
+    const p = plantillas.find((x) => x.id === id); if (!p) return;
+    setHoras(p.horas.length === CAMPOS_HORAS.length ? [...p.horas] : vacias()); setExtra(p.extra); setTractor(p.tractor); setActividad(p.actividad); setMsg({ ok: `Plantilla «${p.nombre}» cargada. Revisa trabajadores, fecha y kilos antes de guardar.` });
+  };
+  const guardarPlantilla = () => {
+    if (!fincaEf) return setMsg({ error: "Elige una finca antes de guardar una plantilla." });
+    const nombre = window.prompt("Nombre de la plantilla (por ejemplo, Riego habitual):")?.trim();
+    if (!nombre) return;
+    const nueva: Plantilla = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, nombre: nombre.slice(0, 80), fincaId: fincaEf, horas: [...horas], extra, tractor, actividad };
+    const siguientes = [...plantillas.filter((p) => !(p.fincaId === fincaEf && p.nombre.toLowerCase() === nueva.nombre.toLowerCase())), nueva].slice(-30);
+    setPlantillas(siguientes); localStorage.setItem("campo_plantillas_horas", JSON.stringify(siguientes)); setMsg({ ok: `Plantilla «${nueva.nombre}» guardada para esta finca.` });
+  };
 
   async function enviar(ev: React.FormEvent) {
     ev.preventDefault();
@@ -77,7 +95,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
           <Caja tarea="Fecha *"><input type="date" className="input input-sm" required value={fechaD} max={hoy} onChange={(e) => setFecha(e.target.value)} /></Caja>
       </section>
       <section className="fr-horas-campos space-y-2">
-        <button type="button" className="btn-ghost !py-1" disabled={!fincaEf || !fechaD || ocupado} onClick={() => setRepetir(true)}>Repetir el día anterior</button>
+        <div className="flex flex-wrap items-center gap-2"><button type="button" className="btn-ghost !py-1" disabled={!fincaEf || !fechaD || ocupado} onClick={() => setRepetir(true)}>Repetir el día anterior</button><select className="input input-sm max-w-xs" disabled={ocupado || !plantillasFinca.length} value="" onChange={(e) => cargarPlantilla(e.target.value)} aria-label="Cargar plantilla de horas"><option value="">{plantillasFinca.length ? "Cargar plantilla…" : "Sin plantillas guardadas"}</option>{plantillasFinca.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select><button type="button" className="btn-ghost !py-1" disabled={!fincaEf || ocupado} onClick={guardarPlantilla}>Guardar como plantilla</button></div>
 
         <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {CAMPOS_HORAS.map((c, i) => (

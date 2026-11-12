@@ -50,12 +50,21 @@ export default function Hoy() {
   }, [dia, fincas.map((f) => f.id).join(",")]);
   const visibles = fincas.filter((f) => !grupo || grupoPersonal(f) === grupo);
   const avisos = avisosHoras((datos?.partes ?? []).filter((p) => visibles.some((f) => f.id === p.finca_id)));
+  const partesVisibles = (datos?.partes ?? []).filter((p) => visibles.some((f) => f.id === p.finca_id));
+  const totalHoras = partesVisibles.reduce((s, p) => s + Number(p.horas_totales), 0);
+  const trabajadoresConHoras = new Set(partesVisibles.map((p) => p.trabajador_id).filter(Boolean)).size;
+  const fincasSinRegistro = datos ? visibles.filter((f) => !partesVisibles.some((p) => p.finca_id === f.id)).length : 0;
+  const tareasPendientes = (datos?.tareas ?? []).filter((t) => !t.finca_id || visibles.some((f) => f.id === t.finca_id)).length;
   return <div className="mx-auto max-w-6xl space-y-4">
     <h1 className="text-xl font-semibold">Ayer en las fincas</h1>
     <div className="card grid gap-3 sm:grid-cols-2"><Field label="Día"><input type="date" className="input" max={iso(new Date())} value={dia} onChange={(e) => setDia(e.target.value)} /></Field><Field label="Grupo"><select className="input" value={grupo} onChange={(e) => setGrupo(e.target.value)}><option value="">Todos</option>{GRUPOS_PERSONAL.map((g) => <option key={g}>{g}</option>)}</select></Field></div>
     {error && <p role="alert" className="card text-red-700">{error}</p>}
     {cargando && <p role="status">Cargando resumen…</p>}
     {datos && !cargando && <>
+      <section className="card space-y-3" aria-label="Resumen operativo">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Panel del encargado</p><h2 className="text-lg font-extrabold">Resumen operativo · {fecha(dia)}</h2></div><div className="flex flex-wrap gap-2"><Link to="/horas" className="btn-ghost !py-1.5 text-sm">Registrar horas</Link><Link to="/ultimos7" className="btn-ghost !py-1.5 text-sm">Revisar partes</Link><Link to="/calendario" className="btn-ghost !py-1.5 text-sm">Ver calendario</Link></div></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><div className="rounded-lg bg-green-50 p-3"><p className="text-xs text-stone-600">Horas registradas</p><p className="text-2xl font-extrabold text-green-800">{num(totalHoras, 1)} h</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-xs text-stone-600">Trabajadores con horas</p><p className="text-2xl font-extrabold text-blue-800">{trabajadoresConHoras}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-xs text-stone-600">Fincas sin registro</p><p className="text-2xl font-extrabold text-amber-800">{fincasSinRegistro}</p></div><div className="rounded-lg bg-stone-100 p-3"><p className="text-xs text-stone-600">Tareas pendientes</p><p className="text-2xl font-extrabold text-stone-800">{tareasPendientes}</p></div></div>
+      </section>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{visibles.map((f) => {
         const pp = datos.partes.filter((p) => p.finca_id === f.id), registrados = new Set(pp.map((p) => p.trabajador_id).filter(Boolean));
         const activos = datos.personal.filter((t) => t.trabajadores_fincas.some((a) => a.finca_id === f.id && a.activo));

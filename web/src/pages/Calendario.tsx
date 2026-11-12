@@ -120,6 +120,7 @@ export default function Calendario() {
   const [mes, setMes] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [elegido, setElegido] = useState(hoy);
   const [finca, setFinca] = useState("");
+  const [modo, setModo] = useState<"mes" | "semana">("mes");
   // Cada usuario ve «su» calendario (lo asignado a él y lo que no tiene dueño en sus fincas). El administrador puede ver el de todos o el de cada usuario.
   const [vista, setVista] = useState<string>(verTodos ? "todos" : "mio");
   const [nueva, setNueva] = useState<string | null>(null); // fecha con la que se abre el alta ("" = sin fecha)
@@ -140,15 +141,24 @@ export default function Calendario() {
       if (verTodos && vista !== "mio") { q = q.eq("asignado_a", vista); sinFecha = sinFecha.eq("asignado_a", vista); }
       else { q = q.eq("asignado_a", yo); sinFecha = sinFecha.eq("asignado_a", yo); }
     }
-    const [a, b, u] = await Promise.all([q, sinFecha, verTodos ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
+    let vencidas = db.from("tareas").select(sel).lt("fecha", hoy).eq("completada", false).order("fecha").order("created_at");
+    if (finca) vencidas = vencidas.eq("finca_id", finca);
+    if (!verTodo) {
+      if (verTodos && vista !== "mio") vencidas = vencidas.eq("asignado_a", vista);
+      else vencidas = vencidas.eq("asignado_a", yo);
+    }
+    const [a, b, c, u] = await Promise.all([q, sinFecha, vencidas, verTodos ? db.from("profiles").select("id,nombre").eq("activo", true).order("nombre") : Promise.resolve({ data: [] as Usuario[], error: null })]);
     if (a.error) throw new Error(a.error.message);
-    return { tareas: (a.data ?? []) as unknown as Tarea[], sinFecha: (b.data ?? []) as unknown as Tarea[], usuarios: (u.data ?? []) as Usuario[] };
+    if (b.error || c.error) throw new Error((b.error ?? c.error)?.message ?? "No se pudieron cargar las tareas");
+    return { tareas: (a.data ?? []) as unknown as Tarea[], sinFecha: (b.data ?? []) as unknown as Tarea[], vencidas: (c.data ?? []) as unknown as Tarea[], usuarios: (u.data ?? []) as Usuario[] };
   }, [desde, finca, verTodos, vista, yo]);
 
-  const tareas = datos?.tareas ?? [], sinFecha = datos?.sinFecha ?? [], usuarios = datos?.usuarios ?? [];
+  const tareas = datos?.tareas ?? [], sinFecha = datos?.sinFecha ?? [], vencidas = datos?.vencidas ?? [], usuarios = datos?.usuarios ?? [];
   const porDia = new Map<string, Tarea[]>();
   for (const t of tareas) porDia.set(t.fecha!, [...(porDia.get(t.fecha!) ?? []), t]);
   const delDia = porDia.get(elegido) ?? [];
+  const semanaInicio = sumarDias(new Date(elegido + "T00:00:00"), -((new Date(elegido + "T00:00:00").getDay() + 6) % 7));
+  const semana = Array.from({ length: 7 }, (_, i) => sumarDias(semanaInicio, i));
   const pendientesMes = tareas.filter((t) => !t.completada && t.fecha! >= dia(primero) && t.fecha! <= dia(new Date(mes.getFullYear(), mes.getMonth() + 1, 0))).length;
   const cambiarMes = (n: number) => { const d = new Date(mes.getFullYear(), mes.getMonth() + n, 1); setMes(d); setElegido(dia(d)); setNueva(null); };
   const irHoy = () => { const d = new Date(); setMes(new Date(d.getFullYear(), d.getMonth(), 1)); setElegido(hoy); };
@@ -166,6 +176,7 @@ export default function Calendario() {
             <span className="min-w-[11rem] text-center text-lg font-extrabold capitalize" style={{ color: "#0f6b0f" }}>{MESES[mes.getMonth()]} {mes.getFullYear()}</span>
             <button type="button" className="btn-ghost !px-3" onClick={() => cambiarMes(1)} aria-label="Mes siguiente">›</button>
             <button type="button" className="btn-ghost" onClick={irHoy}>Hoy</button>
+            <div className="ml-2 flex rounded-lg border border-stone-300 p-0.5 text-xs font-bold"><button type="button" className={`rounded px-2 py-1 ${modo === "mes" ? "bg-green-100 text-green-900" : ""}`} onClick={() => setModo("mes")}>Mes</button><button type="button" className={`rounded px-2 py-1 ${modo === "semana" ? "bg-green-100 text-green-900" : ""}`} onClick={() => setModo("semana")}>Semana</button></div>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -186,14 +197,15 @@ export default function Calendario() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {/* Mes */}
         <div className="card p-2 sm:p-3">
+          {modo === "semana" && <div className="mb-2 flex items-center justify-between gap-2"><h2 className="font-extrabold">Semana del {fecha(dia(semana[0]))}</h2><span className="text-xs text-stone-500">Pulsa un día para ver sus tareas</span></div>}
           <div className="grid grid-cols-7 gap-px text-center text-xs font-extrabold uppercase text-stone-600">{DIAS_SEM.map((d) => <div key={d} className="py-1">{d}</div>)}</div>
           <div className="grid grid-cols-7 gap-1">
-            {celdas.map((d) => {
+            {(modo === "semana" ? semana : celdas).map((d) => {
               const s = dia(d), lista = porDia.get(s) ?? [], fuera = d.getMonth() !== mes.getMonth();
               const pend = lista.filter((t) => !t.completada).length;
               return (
                 <button key={s} type="button" onClick={() => { setElegido(s); setNueva(null); }}
-                  className={`min-h-[3.2rem] rounded-lg p-1 text-left align-top sm:min-h-[5.2rem] ${fuera ? "opacity-45" : ""}`}
+                  className={`min-h-[3.2rem] rounded-lg p-1 text-left align-top ${modo === "semana" ? "min-h-[7rem]" : "sm:min-h-[5.2rem]"} ${fuera ? "opacity-45" : ""}`}
                   style={{ border: s === elegido ? "2px solid #118a11" : "1px solid #c9d8c9", background: s === elegido ? "#e8f6e7" : s === hoy ? "#fff6e0" : "#fff" }}>
                   <span className={`text-xs font-extrabold ${s === hoy ? "rounded-full bg-orange-500 px-1.5 py-0.5 text-white" : ""}`}>{d.getDate()}</span>
                   {/* Móvil: puntos por tarea; escritorio: títulos */}
@@ -219,6 +231,12 @@ export default function Calendario() {
               {delDia.map((t) => <FilaTarea key={t.id} t={t} editable={puedeEditar(t)} usuarios={usuarios} alCambiar={recargar} />)}
               {!delDia.length && nueva === null && <li className="text-sm text-stone-500">No hay tareas este día.{puedeRegistrar && <> <button type="button" className="font-bold text-green-800 underline" onClick={() => setNueva(elegido)}>Añadir una</button></>}</li>}
             </ul>
+          </div>
+
+          <div className="card space-y-2 border-2 border-amber-300 bg-amber-50">
+            <h2 className="text-base font-extrabold">Vencidas</h2>
+            <p className="text-xs text-stone-600">Tareas con fecha anterior a hoy y todavía pendientes.</p>
+            <ul className="space-y-2">{vencidas.map((t) => <FilaTarea key={t.id} t={t} editable={puedeEditar(t)} usuarios={usuarios} alCambiar={recargar} />)}{!vencidas.length && <li className="text-sm text-stone-500">No hay tareas vencidas.</li>}</ul>
           </div>
 
           <div className="card space-y-2">

@@ -75,6 +75,9 @@ export default function Ultimos7() {
   const hoy = new Date();
   const desde = iso(new Date(hoy.getTime() - 6 * 864e5)), hasta = iso(hoy);
   const [dia, setDia] = useState("");
+  const [fincaFiltro, setFincaFiltro] = useState("");
+  const [trabajadorFiltro, setTrabajadorFiltro] = useState("");
+  const [tareaFiltro, setTareaFiltro] = useState("");
   const [editando, setEditando] = useState<Fila | null>(null);
   const [aviso, setAviso] = useState("");
 
@@ -108,6 +111,10 @@ export default function Ultimos7() {
   }
   const lista = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   const cols = lista.some((f) => f.por.has(SIN_MAYOR)) ? [...COLUMNAS, { clave: SIN_MAYOR }] : COLUMNAS;
+  const fincasDisponibles = [...new Map(lista.map((f) => [f.finca, f.finca])).values()].sort((a, b) => a.localeCompare(b, "es"));
+  const trabajadoresDisponibles = [...new Map(lista.map((f) => [f.nombre, f.nombre])).values()].sort((a, b) => a.localeCompare(b, "es"));
+  const tareasDisponibles = [...new Set(lista.flatMap((f) => f.lineas.map((p) => p.tipo_trabajo?.trim() || p.mayor?.trim() || SIN_MAYOR)))].sort((a, b) => a.localeCompare(b, "es"));
+  const listaFiltrada = lista.filter((f) => (!fincaFiltro || f.finca === fincaFiltro) && (!trabajadorFiltro || f.nombre === trabajadorFiltro) && (!tareaFiltro || f.lineas.some((p) => (p.tipo_trabajo?.trim() || p.mayor?.trim() || SIN_MAYOR) === tareaFiltro)));
   const celda = (v?: number) => (v ? <b>{num(v, 2)}</b> : <span className="text-stone-300">0</span>);
 
   async function eliminarTodo(f: Fila) {
@@ -140,6 +147,12 @@ export default function Ultimos7() {
           {puedeRegistrar && <a href="#/horas" className="fr-boton">Pulse aquí para añadir horas</a>}
         </div>
 
+        <div className="card grid gap-2 sm:grid-cols-3">
+          <label className="text-sm font-semibold">Finca<select className="input mt-1" value={fincaFiltro} onChange={(e) => setFincaFiltro(e.target.value)}><option value="">Todas</option>{fincasDisponibles.map((f) => <option key={f}>{f}</option>)}</select></label>
+          <label className="text-sm font-semibold">Trabajador<select className="input mt-1" value={trabajadorFiltro} onChange={(e) => setTrabajadorFiltro(e.target.value)}><option value="">Todos</option>{trabajadoresDisponibles.map((t) => <option key={t}>{t}</option>)}</select></label>
+          <label className="text-sm font-semibold">Tarea<select className="input mt-1" value={tareaFiltro} onChange={(e) => setTareaFiltro(e.target.value)}><option value="">Todas</option>{tareasDisponibles.map((t) => <option key={t}>{t}</option>)}</select></label>
+        </div>
+
         {aviso && <p role="status" className="card text-green-800">{aviso}</p>}
         {error && <p role="alert" className="rounded bg-white px-3 py-2 text-sm text-red-600">{error}</p>}
         {cargando && !datos && <p className="fr-etiqueta">Cargando…</p>}
@@ -148,8 +161,13 @@ export default function Ultimos7() {
         {elegido && !lista.length && !cargando && dias.includes(elegido) && trDia.length === 0 && <p className="rounded bg-white/90 px-3 py-2 text-sm">Sin registros este día.</p>}
         {elegido && !dias.includes(elegido) && !cargando && <p className="rounded bg-white/90 px-3 py-2 text-sm">No hay nada registrado el {fecha(elegido)}.</p>}
 
-        {elegido && lista.length > 0 && (
+        {elegido && listaFiltrada.length > 0 && (
           <>
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+            <span>Visible: {num(listaFiltrada.reduce((a, f) => a + f.total, 0), 2)} h · {listaFiltrada.length} trabajador(es)</span>
+            {(fincaFiltro || trabajadorFiltro || tareaFiltro) && <button type="button" className="text-green-800 underline" onClick={() => { setFincaFiltro(""); setTrabajadorFiltro(""); setTareaFiltro(""); }}>Limpiar filtros</button>}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-700">{[...new Map(listaFiltrada.map((f) => [f.finca, f.total])).entries()].map(([f, h]) => <span key={f} className="rounded-full bg-green-100 px-3 py-1">{f}: {num(h, 2)} h</span>)}</div>
           <div className="hidden overflow-x-auto sm:block">
             <table className="fr-tabla w-full">
               <thead>
@@ -162,7 +180,7 @@ export default function Ultimos7() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((f) => (
+                {listaFiltrada.map((f) => (
                   <Fragment key={f.clave}>
                     <tr>
                       <td className="text-center">
@@ -178,8 +196,8 @@ export default function Ultimos7() {
                   </Fragment>
                 ))}
                 <tr className="fr-total">
-                  <td /><td className="text-left">Total del día</td><td>{num(lista.reduce((a, f) => a + f.total, 0), 2)}</td><td />
-                  {cols.map((c) => <td key={c.clave}>{celda(lista.reduce((a, f) => a + (f.por.get(c.clave) ?? 0), 0))}</td>)}
+                    <td /><td className="text-left">Total visible</td><td>{num(listaFiltrada.reduce((a, f) => a + f.total, 0), 2)}</td><td />
+                  {cols.map((c) => <td key={c.clave}>{celda(listaFiltrada.reduce((a, f) => a + (f.por.get(c.clave) ?? 0), 0))}</td>)}
                 </tr>
               </tbody>
             </table>
@@ -187,7 +205,7 @@ export default function Ultimos7() {
 
           {/* Móvil: una tarjeta por trabajador, con solo las subtareas en las que tiene horas */}
           <div className="space-y-3 sm:hidden">
-            {lista.map((f) => (
+            {listaFiltrada.map((f) => (
               <div key={f.clave} className="card">
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
@@ -203,11 +221,12 @@ export default function Ultimos7() {
               </div>
             ))}
             <div className="card flex items-center justify-between font-extrabold" style={{ background: "#e8f6e7" }}>
-              <span>Total del día</span><span>{num(lista.reduce((a, f) => a + f.total, 0), 2)} h</span>
+              <span>Total visible</span><span>{num(listaFiltrada.reduce((a, f) => a + f.total, 0), 2)} h</span>
             </div>
           </div>
           </>
         )}
+        {elegido && lista.length > 0 && !listaFiltrada.length && <p className="rounded bg-white/90 px-3 py-2 text-sm">No hay registros que coincidan con estos filtros.</p>}
 
         {trDia.length > 0 && (
           <div className="overflow-x-auto">
