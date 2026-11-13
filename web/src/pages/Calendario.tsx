@@ -199,7 +199,7 @@ export default function Calendario() {
         <div className="card p-2 sm:p-3">
           {modo === "semana" && <div className="mb-2 flex items-center justify-between gap-2"><h2 className="font-extrabold">Semana del {fecha(dia(semana[0]))}</h2><span className="text-xs text-stone-500">Pulsa un día para ver sus tareas</span></div>}
           <div className="grid grid-cols-7 gap-px text-center text-xs font-extrabold uppercase text-stone-600">{DIAS_SEM.map((d) => <div key={d} className="py-1">{d}</div>)}</div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className={`fr-calendario-grid grid grid-cols-7 gap-1 ${modo === "semana" ? "fr-calendario-grid-semana" : ""}`}>
             {(modo === "semana" ? semana : celdas).map((d) => {
               const s = dia(d), lista = porDia.get(s) ?? [], fuera = d.getMonth() !== mes.getMonth();
               const pend = lista.filter((t) => !t.completada).length;
@@ -219,6 +219,7 @@ export default function Calendario() {
               );
             })}
           </div>
+          {modo === "semana" && <div className="fr-calendario-agenda mt-2 space-y-2 sm:hidden">{semana.map((d) => { const s = dia(d), lista = porDia.get(s) ?? []; return <section key={s} className={`rounded-xl border-2 bg-white p-3 ${s === hoy ? "border-orange-400" : s === elegido ? "border-green-600" : "border-stone-200"}`}><button type="button" className="flex w-full items-center justify-between gap-2 text-left" onClick={() => { setElegido(s); setNueva(null); }}><span className="font-extrabold capitalize">{textoDia(s)}</span><span className="text-xs font-bold text-stone-500">{lista.length ? `${lista.length} tarea(s)` : "Sin tareas"}</span></button>{lista.length > 0 && <ul className="mt-2 space-y-1.5">{lista.map((t) => <li key={t.id} className={`rounded-lg px-2 py-1.5 text-sm font-semibold ${t.completada ? "bg-stone-100 text-stone-400 line-through" : "bg-green-50"}`}><span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: color(t.tipo) }} />{t.titulo}</li>)}</ul>}</section>; })}</div>}
           <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-stone-600">{TIPOS.map(([v, t, c]) => <span key={v}><i className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: c }} />{t}</span>)}</p>
         </div>
 

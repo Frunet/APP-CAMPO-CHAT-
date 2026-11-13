@@ -98,7 +98,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
       <section className="fr-horas-campos space-y-2">
         <div className="flex flex-wrap items-center gap-2"><button type="button" className="btn-ghost !py-1" disabled={!fincaEf || !fechaD || ocupado} onClick={() => setRepetir(true)}>Repetir el día anterior</button><select className="input input-sm max-w-xs" disabled={ocupado || !plantillasFinca.length} value="" onChange={(e) => cargarPlantilla(e.target.value)} aria-label="Cargar plantilla de horas"><option value="">{plantillasFinca.length ? "Cargar plantilla…" : "Sin plantillas guardadas"}</option>{plantillasFinca.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select><button type="button" className="btn-ghost !py-1" disabled={!fincaEf || ocupado} onClick={guardarPlantilla}>Guardar como plantilla</button></div>
 
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+        <div className="fr-horas-tareas grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-2">
           {CAMPOS_HORAS.map((c, i) => (
             <Caja key={c.etiqueta} mayor={c.mayor} tarea={c.subtipo ? `${c.tarea} · ${c.subtipo}` : c.tarea}>
               <input inputMode="decimal" className={`input input-sm ${horas[i] ? "fr-lleno" : ""}`} placeholder="0" value={horas[i]} onChange={(e) => setHoras((h) => h.map((x, j) => (j === i ? e.target.value : x)))} />
@@ -115,7 +115,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        <div className="fr-horas-secundarios grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-2">
           <Caja tarea="🚜 Tractor día (h)"><input inputMode="decimal" className={`input input-sm ${tractor ? "fr-lleno" : ""}`} placeholder="0" value={tractor} onChange={(e) => setTractor(e.target.value)} /></Caja>
           <Caja tarea="De ellas, extras manuales (h)"><input inputMode="decimal" className={`input input-sm ${extra ? "fr-lleno" : ""}`} placeholder="0" value={extra} onChange={e=>setExtra(e.target.value)} /><p className="mt-1 text-[10px] text-stone-600">Por persona, incluidas en el total; por ejemplo, 7 h extras en un festivo. Se mantiene el mínimo automático al superar 7 h/día, sin duplicarlas.</p></Caja>
           <div><Caja tarea="Observaciones"><input className="input input-sm" placeholder="Escriba aquí…" maxLength={400} value={actividad} onChange={(e) => setActividad(e.target.value)} /></Caja></div>

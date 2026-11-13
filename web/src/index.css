@@ -106,8 +106,18 @@ textarea.input { border-radius: .9rem; }
   .card { padding: .8rem; }
   .btn, .btn-ghost { min-height: 2.75rem; }
   .fr-tabla th, .fr-tabla td { padding: .45rem .4rem; font-size: .85rem; }
+  .fr-horas-tareas .input { min-height: 2.8rem; }
+  .fr-horas-secundarios .input { min-height: 2.8rem; }
+  .fr-horas-barra { gap: .5rem; }
+  .fr-horas-barra .btn { flex: 0 0 auto; min-width: 7rem; }
+  .fr-horas-barra > span { font-size: .78rem; line-height: 1.2; }
+  .fr-calendario-grid-semana { display: none; }
+  .fr-calendario-agenda { display: block; }
 }
 @media (max-width: 640px) {
   .input-sm { padding: .15rem .45rem; min-height: 2.1rem; font-size: 16px; }
   .fr-horas-card { padding: .5rem; }
+}
+@media (min-width: 641px) {
+  .fr-calendario-agenda { display: none; }
 }
