@@ -7,13 +7,13 @@ export type TareaDef = { nombre: string; subtipos?: readonly string[]; cosecha?:
 export type MayorDef = { nombre: string; tareas: readonly TareaDef[] };
 
 export const MAYORES: readonly MayorDef[] = [
-  { nombre: "Instalaciones", tareas: [{ nombre: "Obra" }, { nombre: "Reparaciones", subtipos: ["Maquinaria"] }] },
+  { nombre: "Instalaciones", tareas: [{ nombre: "Reparaciones", subtipos: ["Maquinaria"] }] },
   { nombre: "Suelos", tareas: [{ nombre: "Hierba", subtipos: ["Desbrozadora", "Tractor"] }] },
   { nombre: "Liado y guiado", tareas: [] },
   { nombre: "Otros cuidados de planta", tareas: [{ nombre: "Poda" }, { nombre: "Aplicaciones foliares" }] },
   { nombre: "Riego", tareas: [{ nombre: "Riego" }] },
   { nombre: "Cosecha", tareas: [{ nombre: "Cosecha", cosecha: true }] },
-  { nombre: "Otros", tareas: [{ nombre: "Otros" }] },
+  { nombre: "Otros", tareas: [{ nombre: "Obra" }, { nombre: "Otros" }] },
   { nombre: "Revisión finca", tareas: [{ nombre: "Revisión finca" }] },
 ];
 export const NOMBRES_MAYOR = MAYORES.map((m) => m.nombre);
