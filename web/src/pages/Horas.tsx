@@ -11,7 +11,7 @@ import RepetirDia from "../components/RepetirDia";
 
 type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
 type Variedad = { id: string; cultivo: string; variedad: string | null };
-type Plantilla = { id: string; nombre: string; fincaId: string; horas: string[]; extra: string; tractor: string; actividad: string };
+type Plantilla = { id: string; nombre: string; fincaId: string; horas: string[]; extra: string; tractor: string; actividad: string; observaciones?: string[] };
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : 0; };
 const vacias = () => CAMPOS_HORAS.map(() => "");
 const es = (n: number) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 });
@@ -28,6 +28,7 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const [buscar, setBuscar] = useState("");
   const [sel, setSel] = useState<string[]>([]);
   const [horas, setHoras] = useState<string[]>(vacias());
+  const [observaciones, setObservaciones] = useState<string[]>(() => CAMPOS_HORAS.map(() => ""));
   const [extra, setExtra] = useState("");
 
   const [tractor, setTractor] = useState("");
@@ -65,13 +66,13 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
   const plantillasFinca = plantillas.filter((p) => !fincaEf || p.fincaId === fincaEf);
   const cargarPlantilla = (id: string) => {
     const p = plantillas.find((x) => x.id === id); if (!p) return;
-    setHoras(p.horas.length === CAMPOS_HORAS.length ? [...p.horas] : vacias()); setExtra(p.extra); setTractor(p.tractor); setActividad(p.actividad); setMsg({ ok: `Plantilla «${p.nombre}» cargada. Revisa trabajadores, fecha y kilos antes de guardar.` });
+    setHoras(p.horas.length === CAMPOS_HORAS.length ? [...p.horas] : vacias()); setObservaciones(p.observaciones?.length === CAMPOS_HORAS.length ? [...p.observaciones] : CAMPOS_HORAS.map(() => "")); setExtra(p.extra); setTractor(p.tractor); setActividad(p.actividad); setMsg({ ok: `Plantilla «${p.nombre}» cargada. Revisa trabajadores, fecha y kilos antes de guardar.` });
   };
   const guardarPlantilla = () => {
     if (!fincaEf) return setMsg({ error: "Elige una finca antes de guardar una plantilla." });
     const nombre = window.prompt("Nombre de la plantilla (por ejemplo, Riego habitual):")?.trim();
     if (!nombre) return;
-    const nueva: Plantilla = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, nombre: nombre.slice(0, 80), fincaId: fincaEf, horas: [...horas], extra, tractor, actividad };
+    const nueva: Plantilla = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, nombre: nombre.slice(0, 80), fincaId: fincaEf, horas: [...horas], observaciones: [...observaciones], extra, tractor, actividad };
     const siguientes = [...plantillas.filter((p) => !(p.fincaId === fincaEf && p.nombre.toLowerCase() === nueva.nombre.toLowerCase())), nueva].slice(-30);
     setPlantillas(siguientes); localStorage.setItem("campo_plantillas_horas", JSON.stringify(siguientes)); setMsg({ ok: `Plantilla «${nueva.nombre}» guardada para esta finca.` });
   };
@@ -80,9 +81,9 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
     ev.preventDefault();
     setOcupado(true); setMsg(null);
     try {
-      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, extra, tractor, kg, variedad, actividad, forzar });
+      const ok = await registrarHoras({ finca_id: fincaEf, fecha: fechaD, trabajadores: sel, horas, observaciones, extra, tractor, kg, variedad, actividad, forzar });
       setMsg({ ok });
-      setSel([]); setHoras(vacias()); setExtra(""); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
+      setSel([]); setHoras(vacias()); setObservaciones(CAMPOS_HORAS.map(() => "")); setExtra(""); setTractor(""); setKg(""); setVariedad(""); setActividad(""); setForzar(false);
       alGuardar();
     } catch (e) { setMsg({ error: (e as Error).message }); }
     setOcupado(false);
@@ -104,6 +105,8 @@ function FormHoras({ trabajadores, variedades, alGuardar }: { trabajadores: Trab
             </Caja>
           ))}
         </div>
+
+        {horas.some((h) => dec(h) > 0) && <details className="rounded-lg border border-stone-200 bg-stone-50 p-2"><summary className="cursor-pointer text-sm font-bold">Observaciones por tarea</summary><div className="mt-2 grid gap-2 sm:grid-cols-2">{CAMPOS_HORAS.map((c, i) => dec(horas[i]) > 0 ? <Caja key={c.etiqueta} tarea={`${c.tarea}${c.subtipo ? ` · ${c.subtipo}` : ""}`}><input className="input input-sm" maxLength={350} placeholder="Observación de esta tarea…" value={observaciones[i]} onChange={(e) => setObservaciones((actual) => actual.map((x, j) => j === i ? e.target.value : x))} /></Caja> : null)}</div><p className="mt-2 text-xs text-stone-600">Cada observación se guarda solo con la tarea que tenga horas. La observación general se usa como respaldo si una tarea queda vacía.</p></details>}
 
         {iCosecha >= 0 && dec(horas[iCosecha]) > 0 && (
           <div className="grid grid-cols-2 gap-2">

@@ -5,7 +5,7 @@ import { msgError } from "../ui";
 import { activoEnFinca } from "./personal-fincas";
 
 export type EntradaHoras = {
-  finca_id: string; fecha: string; trabajadores: string[]; horas: string[]; extra: string; tractor: string; kg: string; variedad: string; actividad: string; forzar: boolean;
+  finca_id: string; fecha: string; trabajadores: string[]; horas: string[]; extra: string; tractor: string; kg: string; variedad: string; actividad: string; observaciones?: string[]; forzar: boolean;
 };
 const dec = (v: string) => { const t = v.trim(); if (!t) return null; const x = Number(t.replace(",", ".")); return Number.isFinite(x) ? x : NaN; };
 const es = (n: number) => n.toLocaleString("es-ES");
@@ -28,7 +28,8 @@ export async function registrarHoras(e: EntradaHoras): Promise<string> {
     const h = dec(e.horas[i] ?? "");
     if (h == null || h === 0) return;
     if (Number.isNaN(h) || h < 0 || h > 24) falla(`Horas no válidas en «${c.etiqueta}»`);
-    const l: (typeof lineas)[number] = { mayor: c.mayor, tarea: c.tarea, h: h!, extra: 0, actividad: [c.subtipo, obs].filter(Boolean).join(" · ") || null };
+    const obsTarea = e.observaciones?.[i]?.trim().slice(0, 400) || obs;
+    const l: (typeof lineas)[number] = { mayor: c.mayor, tarea: c.tarea, h: h!, extra: 0, actividad: [c.subtipo, obsTarea].filter(Boolean).join(" · ") || null };
     if (c.cosecha) {
       const kg = numero(e.kg);
       if (kg == null || kg <= 0 || kg > 10_000_000) falla("Indica los kg cosechados en Cosecha");
