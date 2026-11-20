@@ -7,6 +7,7 @@ import { AccionForm } from "../forms";
 import { activoEnFinca, type AsignacionFinca } from "../lib/personal-fincas";
 import { normalizarPersonal, grupoPersonal } from "../lib/grupos-personal";
 import { crearTrabajador } from "../lib/maestros";
+import { nombreUnificado } from "../lib/nombres";
 type Trab = { id: string; codigo: string | null; nombre: string; activo: boolean; trabajadores_fincas: AsignacionFinca[] };
 export default function MiPersonal() {
   const { fincas, puedeRegistrar, cargando: authCargando } = useAuth();
@@ -17,7 +18,7 @@ export default function MiPersonal() {
     if (!puedeRegistrar) return [] as Trab[];
     const r = await db.rpc("listar_personal_disponible");
     if (r.error) throw new Error(r.error.message);
-    return (r.data ?? []) as Trab[];
+    return (r.data ?? []).map((t: Trab) => ({ ...t, nombre: nombreUnificado(t.nombre) })) as Trab[];
   }, [puedeRegistrar]);
   async function cambiar(t: Trab) {
     if (ocupado || !t.activo) return;

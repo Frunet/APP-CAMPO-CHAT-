@@ -5,6 +5,7 @@ import { msgError, useCarga } from "../ui";
 import EditarHoras from "../components/EditarHoras";
 import { CAMPOS_HORAS } from "../lib/horas";
 import { fecha, iso, num } from "../lib/format";
+import { nombreUnificado } from "../lib/nombres";
 
 export type Parte = {
   id: string; updated_at: string; fecha: string; finca_id: string; mayor: string | null; tipo_trabajo: string | null; actividad: string | null; num_trabajadores: number;
@@ -15,7 +16,7 @@ type Tractor = { id: string; fecha: string; horas: number; observaciones: string
 
 const dec = (v: string) => { const x = Number(v.replace(",", ".")); return Number.isFinite(x) ? x : NaN; };
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const nombreDe = (p: Parte) => p.trabajadores?.nombre ?? p.trabajador_nombre ?? (p.num_trabajadores > 1 ? `Sin nombre (${p.num_trabajadores} personas)` : "Sin nombre");
+const nombreDe = (p: Parte) => nombreUnificado(p.trabajadores?.nombre ?? p.trabajador_nombre ?? (p.num_trabajadores > 1 ? `Sin nombre (${p.num_trabajadores} personas)` : "Sin nombre"));
 
 /** Fila de tractor con el mismo aspecto que la tabla verde. */
 function FilaTractor({ t, editable, alCambiar }: { t: Tractor; editable: boolean; alCambiar: () => void }) {

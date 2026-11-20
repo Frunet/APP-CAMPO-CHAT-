@@ -7,6 +7,7 @@ import { actualizarEquipo, actualizarTrabajador, crearEquipo, crearFestivo, crea
 import { GRUPOS_PERSONAL, grupoPersonal, normalizarPersonal } from "../../lib/grupos-personal";
 import { CONSULTA_PERSONAL, fincasActivas, fincasEnVista } from "../../lib/personal-fincas";
 import { msgError } from "../../ui";
+import { nombreUnificado } from "../../lib/nombres";
 
 const eur = (v: number | null | undefined) => (v == null ? "—" : `${Number(v).toLocaleString("es-ES", { minimumFractionDigits: 2 })} €`);
 
@@ -93,7 +94,7 @@ export default function Personal() {
       db.from("fincas").select("id,codigo,nombre,activa").order("nombre"),
     ]);
     for (const r of [e, t, f, h, fi]) if (r.error) throw new Error(r.error.message);
-    return { equipos: (e.data ?? []) as any[], trabajadores: (t.data ?? []) as any[], festivos: (f.data ?? []) as any[], historico: (h.data ?? []) as any[], fincas: (fi.data ?? []) as FincaPersonal[] };
+    return { equipos: (e.data ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) })) as any[], trabajadores: (t.data ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) })) as any[], festivos: (f.data ?? []) as any[], historico: (h.data ?? []) as any[], fincas: (fi.data ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) })) as FincaPersonal[] };
   }, []);
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-stone-500">Cargando…</p>;

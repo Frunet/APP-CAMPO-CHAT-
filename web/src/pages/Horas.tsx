@@ -5,6 +5,7 @@ import { useCarga } from "../ui";
 import { CAMPOS_HORAS, MAX_HORAS_DIA } from "../lib/horas";
 import { registrarHoras } from "../lib/registrarHoras";
 import { iso } from "../lib/format";
+import { nombreUnificado } from "../lib/nombres";
 import { activoEnFinca, fincasActivas, type AsignacionFinca } from "../lib/personal-fincas";
 import Caja from "../components/CajaHoras";
 import RepetirDia from "../components/RepetirDia";
@@ -177,7 +178,7 @@ export default function Horas() {
     ]);
     if (t.error) throw new Error(t.error.message);
     if (v.error) throw new Error(v.error.message);
-    return { trab: (t.data ?? []) as Trab[], vars: (v.data ?? []) as Variedad[] };
+    return { trab: (t.data ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) })) as Trab[], vars: (v.data ?? []) as Variedad[] };
   }, []);
 
   return (

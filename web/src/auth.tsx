@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { db } from "./supabase";
+import { nombreUnificado } from "./lib/nombres";
 
 export type Rol = "administrador" | "responsable" | "encargado" | "consulta";
 export type Finca = { id: string; nombre: string };
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         db.from("fincas").select("id,nombre").eq("activa", true).order("nombre"),
       ]);
       if (!vivo) return;
-      setPerfil((p as Perfil) ?? null); setFincas((f as Finca[]) ?? []); setCargando(false);
+      setPerfil((p as Perfil) ?? null); setFincas(((f as Finca[]) ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) }))); setCargando(false);
     })();
     return () => { vivo = false; };
   }, [session]);

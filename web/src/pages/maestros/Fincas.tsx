@@ -3,6 +3,7 @@ import { AccionForm } from "../../forms";
 import { Field, useCarga } from "../../ui";
 import { num } from "../../lib/format";
 import { actualizarFinca, actualizarLote, actualizarParcela, crearCampana, crearFinca, crearLote, crearParcela } from "../../lib/maestros";
+import { nombreUnificado } from "../../lib/nombres";
 
 const ESTADOS = ["activa", "en_preparacion", "en_descanso", "inactiva"];
 const TIPOS = [["propia", "Propia"], ["arrendada", "Arrendada"], ["terceros", "Gestionada por terceros"]];
@@ -22,7 +23,7 @@ export default function Fincas() {
       .select("id,codigo,nombre,ubicacion,tipo_explotacion,superficie_ha,observaciones,activa,parcelas(id,codigo,nombre,superficie_ha,estado,observaciones,lotes(id,codigo,nombre,superficie_ha,estado,observaciones))")
       .order("nombre");
     if (error) throw new Error(error.message);
-    return (data ?? []) as any[];
+    return (data ?? []).map((x) => ({ ...x, nombre: nombreUnificado(x.nombre) })) as any[];
   }, []);
   if (error) return <p role="alert" className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-stone-500">Cargando…</p>;
