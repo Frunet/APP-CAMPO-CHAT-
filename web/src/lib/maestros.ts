@@ -1,5 +1,6 @@
 import { db, SUPABASE_KEY, SUPABASE_URL } from "../supabase";
 import { check, n, opcional, s, uuid } from "../forms";
+import { nombreUnificado } from "./nombres";
 
 // Maestros: solo el administrador los modifica (lo garantizan las reglas RLS de la base de datos).
 const fechaOk = (v: string | null, msg: string) => { if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error(msg); return v; };
@@ -11,14 +12,14 @@ const TIPOS = ["propia", "arrendada", "terceros"];
 export async function crearFinca(fd: FormData) {
   const tipo = s(fd, "tipo_explotacion") ?? "propia";
   if (!TIPOS.includes(tipo)) throw new Error("Tipo de explotación no válido");
-  const { error } = await db.from("fincas").insert({ codigo: requerido(s(fd, "codigo"), "Falta el código"), nombre: requerido(s(fd, "nombre"), "Falta el nombre"), tipo_explotacion: tipo, superficie_ha: opcional(fd, "superficie_ha", "La superficie"), ubicacion: s(fd, "ubicacion"), observaciones: s(fd, "observaciones") });
+  const { error } = await db.from("fincas").insert({ codigo: requerido(s(fd, "codigo"), "Falta el código"), nombre: nombreUnificado(requerido(s(fd, "nombre"), "Falta el nombre")), tipo_explotacion: tipo, superficie_ha: opcional(fd, "superficie_ha", "La superficie"), ubicacion: s(fd, "ubicacion"), observaciones: s(fd, "observaciones") });
   check(error);
   return "Finca creada. Asígnala a los usuarios en «Usuarios».";
 }
 export async function actualizarFinca(fd: FormData) {
   const tipo = s(fd, "tipo_explotacion") ?? "propia";
   if (!TIPOS.includes(tipo)) throw new Error("Tipo de explotación no válido");
-  const { data, error } = await db.from("fincas").update({ nombre: requerido(s(fd, "nombre"), "Falta el nombre"), ubicacion: s(fd, "ubicacion"), superficie_ha: opcional(fd, "superficie_ha", "La superficie"), tipo_explotacion: tipo, observaciones: s(fd, "observaciones"), activa: fd.get("activa") === "on" }).eq("id", uuid(s(fd, "id"), "Finca no válida")).select("id");
+  const { data, error } = await db.from("fincas").update({ nombre: nombreUnificado(requerido(s(fd, "nombre"), "Falta el nombre")), ubicacion: s(fd, "ubicacion"), superficie_ha: opcional(fd, "superficie_ha", "La superficie"), tipo_explotacion: tipo, observaciones: s(fd, "observaciones"), activa: fd.get("activa") === "on" }).eq("id", uuid(s(fd, "id"), "Finca no válida")).select("id");
   check(error); actualizado(data, "No se pudo actualizar la finca.");
   return "Finca actualizada.";
 }
@@ -71,7 +72,7 @@ export async function crearCultivo(fd: FormData) {
 // ---------- personal: tarifas normal / extra / festivo ----------
 function datosPersonal(fd: FormData) {
   return {
-    nombre: requerido(s(fd, "nombre"), "Falta el nombre"),
+    nombre: nombreUnificado(requerido(s(fd, "nombre"), "Falta el nombre")),
     coste_hora: opcional(fd, "coste_hora", "La tarifa normal", 10_000), coste_hora_extra: opcional(fd, "coste_hora_extra", "La tarifa de horas extra", 10_000),
     coste_hora_festivo: opcional(fd, "coste_hora_festivo", "La tarifa festiva", 10_000), condiciones: s(fd, "condiciones"),
   };
