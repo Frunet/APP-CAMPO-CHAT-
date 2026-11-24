@@ -26,6 +26,34 @@ export default function Nominas() {
   const trabajador = todos.some((g) => g.clave === f.trabajador) ? f.trabajador : "";
   const res = trabajador ? todos.filter((g) => g.clave === trabajador) : todos;
   const suma = (k: "horas" | "extra" | "festivo") => res.reduce((a, g) => a + g[k], 0);
+  const [exportando, setExportando] = useState(false);
+
+  async function exportarExcel() {
+    if (!datos || !res.length) return;
+    setExportando(true);
+    try {
+      const XLSX = await import("xlsx");
+      const libro = XLSX.utils.book_new();
+      const resumen = [
+        ["Trabajador", "Días", "Horas normales", "Horas extra", "Horas festivas", "Total horas"],
+        ...res.map((g) => [g.trabajador, g.dias, g.normales, g.extra, g.festivo, g.horas]),
+      ] as (string | number)[][];
+      const detalle = [
+        ["Fecha", "Trabajador", "Finca", "Tarea", "Horas", "Horas extra", "Festivo"],
+        ...res.flatMap((g) => g.lineas.map((l) => [new Date(`${l.fecha}T00:00:00`), l.trabajador, l.finca, l.actividad, l.horas, l.extra, l.festivo ? "Sí" : ""])),
+      ] as (string | number | Date)[][];
+      const hoja = (filas: (string | number | Date)[][], anchos: number[]) => {
+        const h = XLSX.utils.aoa_to_sheet(filas, { cellDates: true, dateNF: "dd/mm/yyyy" });
+        h["!cols"] = anchos.map((wch) => ({ wch }));
+        if (filas.length > 1) h["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: filas.length - 1, c: filas[0].length - 1 } }) };
+        return h;
+      };
+      XLSX.utils.book_append_sheet(libro, hoja(resumen, [34, 8, 16, 14, 16, 13]), "Resumen nómina");
+      XLSX.utils.book_append_sheet(libro, hoja(detalle, [12, 32, 22, 44, 10, 14, 10]), "Detalle nómina");
+      const trabajadorArchivo = trabajador ? `_${res[0]?.trabajador.replace(/[^\p{L}\p{N}]+/gu, "_").slice(0, 40)}` : "";
+      XLSX.writeFile(libro, `nomina_${datos.p.desde}_${datos.p.hasta}${trabajadorArchivo}.xlsx`);
+    } finally { setExportando(false); }
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -44,10 +72,12 @@ export default function Nominas() {
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {datos && (
-        <p className="text-sm text-stone-600">
-          {datos.p.etiqueta} ({fecha(datos.p.desde)} – {fecha(datos.p.hasta)}) · {res.length} trabajador(es) · <b>{num(suma("horas"), 1)} h</b>
-          {suma("extra") > 0 && <> (de ellas {num(suma("extra"), 1)} extra)</>}{suma("festivo") > 0 && <> · {num(suma("festivo"), 1)} en festivo</>}
-        </p>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-stone-600">
+          <p>{datos.p.etiqueta} ({fecha(datos.p.desde)} – {fecha(datos.p.hasta)}) · {res.length} trabajador(es) · <b>{num(suma("horas"), 1)} h</b>
+            {suma("extra") > 0 && <> (de ellas {num(suma("extra"), 1)} extra)</>}{suma("festivo") > 0 && <> · {num(suma("festivo"), 1)} en festivo</>}
+          </p>
+          <button type="button" className="btn ml-auto" disabled={exportando || cargando || !res.length} onClick={exportarExcel}>{exportando ? "Preparando…" : "⬇ Exportar detalle a Excel"}</button>
+        </div>
       )}
       {cargando && <p className="text-sm text-stone-500">Cargando…</p>}
 
