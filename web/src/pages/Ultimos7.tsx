@@ -3,6 +3,7 @@ import { useAuth } from "../auth";
 import { db } from "../supabase";
 import { msgError, useCarga } from "../ui";
 import EditarHoras from "../components/EditarHoras";
+import EditarCosechas from "../components/EditarCosechas";
 import { CAMPOS_HORAS } from "../lib/horas";
 import { fecha, iso, num } from "../lib/format";
 import { nombreUnificado } from "../lib/nombres";
@@ -65,7 +66,7 @@ const IconoEditar = () => (
   </svg>
 );
 
-type Fila = { clave: string; nombre: string; codigo: string | null; finca: string; total: number; extra: number; por: Map<string, number>; lineas: Parte[] };
+type Fila = { clave: string; nombre: string; codigo: string | null; finca: string; fincaId: string; total: number; extra: number; por: Map<string, number>; lineas: Parte[] };
 
 /**
  * Revisión de lo registrado en los últimos 7 días, con el aspecto de AppCampo/Frunet: eliges el día y ves una fila por trabajador
@@ -80,6 +81,7 @@ export default function Ultimos7() {
   const [trabajadorFiltro, setTrabajadorFiltro] = useState("");
   const [tareaFiltro, setTareaFiltro] = useState("");
   const [editando, setEditando] = useState<Fila | null>(null);
+  const [editandoCosechas, setEditandoCosechas] = useState<{ fincaId: string; finca: string } | null>(null);
   const [aviso, setAviso] = useState("");
 
   const { datos, error, cargando, recargar } = useCarga(async () => {
@@ -103,7 +105,7 @@ export default function Ultimos7() {
   const mapa = new Map<string, Fila>();
   for (const p of partes.filter((x) => x.fecha === elegido)) {
     const clave = `${p.trabajador_id ?? p.trabajador_nombre ?? "sin"}|${p.finca_id}`;
-    const f: Fila = mapa.get(clave) ?? { clave, nombre: nombreDe(p), codigo: p.trabajadores?.codigo ?? null, finca: p.fincas?.nombre ?? "", total: 0, extra: 0, por: new Map(), lineas: [] };
+    const f: Fila = mapa.get(clave) ?? { clave, nombre: nombreDe(p), codigo: p.trabajadores?.codigo ?? null, finca: p.fincas?.nombre ?? "", fincaId: p.finca_id, total: 0, extra: 0, por: new Map(), lineas: [] };
     const h = Number(p.horas_totales ?? 0);
     f.total += h; f.extra += Number(p.horas_extra_por_trabajador ?? 0) * p.num_trabajadores;
     const m = subtareaDe(p);
@@ -128,6 +130,7 @@ export default function Ultimos7() {
   return (
     <div>
       {editando && <EditarHoras lineas={editando.lineas} nombre={editando.nombre} finca={editando.finca} actualizar={recargar} cerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); setAviso("Horas modificadas correctamente."); recargar(); }} eliminar={() => eliminarTodo(editando)} />}
+      {editandoCosechas && <EditarCosechas fechaDia={elegido} fincaId={editandoCosechas.fincaId} finca={editandoCosechas.finca} cerrar={() => setEditandoCosechas(null)} alGuardar={() => { setEditandoCosechas(null); setAviso("Kilos cosechados modificados correctamente."); recargar(); }} />}
       <div className="mx-auto max-w-6xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -168,7 +171,7 @@ export default function Ultimos7() {
             <span>Visible: {num(listaFiltrada.reduce((a, f) => a + f.total, 0), 2)} h · {listaFiltrada.length} trabajador(es)</span>
             {(fincaFiltro || trabajadorFiltro || tareaFiltro) && <button type="button" className="text-green-800 underline" onClick={() => { setFincaFiltro(""); setTrabajadorFiltro(""); setTareaFiltro(""); }}>Limpiar filtros</button>}
           </div>
-          <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-700">{[...new Map(listaFiltrada.map((f) => [f.finca, f.total])).entries()].map(([f, h]) => <span key={f} className="rounded-full bg-green-100 px-3 py-1">{f}: {num(h, 2)} h</span>)}</div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold text-stone-700">{[...new Set(listaFiltrada.map((f) => f.finca))].map((nombreFinca) => { const filasFinca = listaFiltrada.filter((f) => f.finca === nombreFinca); const primera = filasFinca[0]; const horasFinca = filasFinca.reduce((s, f) => s + f.total, 0); return <span key={nombreFinca} className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1">{nombreFinca}: {num(horasFinca, 2)} h <button type="button" className="font-extrabold text-green-800 underline" onClick={() => setEditandoCosechas({ fincaId: primera.fincaId, finca: nombreFinca })}>Editar kg</button></span>; })}</div>
           <div className="hidden overflow-x-auto sm:block">
             <table className="fr-tabla w-full">
               <thead>
