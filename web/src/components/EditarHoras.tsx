@@ -9,6 +9,7 @@ import Caja from "./CajaHoras";
 const dec = (s: string) => s.trim() ? Number(s.replace(",", ".")) : 0;
 const campoDe = (p: Parte) => CAMPOS_HORAS.findIndex(c => c.tarea === p.tipo_trabajo && (!c.subtipo || (p.actividad ?? "").startsWith(c.subtipo)));
 type Entrada = { id: string | null; campo: number; horas: string; obs: string; original?: Parte };
+type CosechaEdicion = { id: string; cultivo: string; variedad: string | null; kg: string };
 
 /** Corrige la jornada de una persona y finca conservando los identificadores y los datos propios de cada parte. */
 export default function EditarHoras({ lineas, nombre, finca, cerrar, alGuardar, actualizar, eliminar }: {
@@ -24,12 +25,26 @@ export default function EditarHoras({ lineas, nombre, finca, cerrar, alGuardar, 
   ]);
   const [extra, setExtra] = useState(String(lineas.reduce((s, p) => s + Number(p.horas_extra_manuales || 0), 0) || ""));
   const [ocupado, setOcupado] = useState(false), [error, setError] = useState(""), [forzar, setForzar] = useState(false);
+  const [cosechas, setCosechas] = useState<CosechaEdicion[]>([]), [cargandoCosechas, setCargandoCosechas] = useState(true);
   useEffect(() => {
     dialogo.current?.showModal();
     const previo = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previo; };
   }, []);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const p = lineas[0];
+      if (!p) return;
+      const { data, error: errorCosechas } = await db.from("cosechas").select("id,cultivo,variedad,kg").eq("fecha", p.fecha).eq("finca_id", p.finca_id).order("id");
+      if (!vivo) return;
+      if (errorCosechas) setError(msgError(errorCosechas));
+      setCosechas((data ?? []).map((c) => ({ id: c.id, cultivo: c.cultivo, variedad: c.variedad, kg: String(c.kg) })));
+      setCargandoCosechas(false);
+    })();
+    return () => { vivo = false; };
+  }, [lineas]);
   const total = entradas.reduce((s, e) => s + (Number.isFinite(dec(e.horas)) ? dec(e.horas) : 0), 0);
   function cambiar(entrada: Entrada, cambios: Partial<Entrada>) { setEntradas(actual => actual.map(e => e === entrada ? { ...e, ...cambios } : e)); }
   function campo(entrada: Entrada, etiqueta: string) {
@@ -42,6 +57,7 @@ export default function EditarHoras({ lineas, nombre, finca, cerrar, alGuardar, 
     const extras = dec(extra);
     if (!Number.isFinite(extras) || extras < 0 || extras > total) return setError("Las extras manuales deben estar entre cero y las horas totales.");
     if (total > MAX_HORAS_DIA && !forzar) return setError(`La jornada supera ${MAX_HORAS_DIA} h. Revisa las horas o marca «Guardar igualmente».`);
+    if (cosechas.some(c => !Number.isFinite(dec(c.kg)) || dec(c.kg) <= 0 || dec(c.kg) > 10_000_000)) return setError("Los kilos cosechados deben ser mayores que cero.");
     let resto = extras;
     const filas = entradas.filter(e => e.id || dec(e.horas) > 0).map(e => {
       const c = CAMPOS_HORAS[e.campo];
@@ -58,6 +74,12 @@ export default function EditarHoras({ lineas, nombre, finca, cerrar, alGuardar, 
     try {
       const { error } = await db.rpc("editar_jornada_horas", { p_originales: lineas.map(p => ({ id: p.id, updated_at: p.updated_at })), p_lineas: filas, p_forzar: forzar });
       if (error) throw new Error(msgError(error));
+      for (const c of cosechas) {
+        const kg = dec(c.kg);
+        const actualizado = await db.from("cosechas").update({ kg }).eq("id", c.id).select("id");
+        if (actualizado.error) throw new Error(msgError(actualizado.error));
+        if (!actualizado.data?.length) throw new Error("No se pudo actualizar una cosecha; vuelve a cargar el día.");
+      }
       alGuardar();
     } catch (e) { setError((e as Error).message); actualizar(); }
     finally { setOcupado(false); }
@@ -72,8 +94,15 @@ export default function EditarHoras({ lineas, nombre, finca, cerrar, alGuardar, 
         </div>
         {entradas.filter(e => e.campo < 0).map(e => <Caja key={e.id} tarea={e.original?.tipo_trabajo ?? "Tarea anterior"}>{campo(e, e.original?.tipo_trabajo ?? "Tarea anterior")}</Caja>)}
         <Caja tarea="De ellas, extras manuales (h)"><input inputMode="decimal" className="input input-sm sm:max-w-48" placeholder="0" value={extra} onChange={ev => setExtra(ev.target.value)} /><p className="mt-1 text-xs text-stone-600">Incluidas en el total por persona. Se mantiene el mínimo automático al superar 7 h/día.</p></Caja>
+        <section className="rounded-xl border-2 border-green-600 bg-green-50 p-3">
+          <h3 className="text-sm font-extrabold">Kilos cosechados del día</h3>
+          {cargandoCosechas && <p className="mt-1 text-xs text-stone-600">Cargando kilos…</p>}
+          {!cargandoCosechas && !cosechas.length && <p className="mt-1 text-xs text-stone-600">No hay kilos de cosecha registrados para esta finca y fecha.</p>}
+          {!cargandoCosechas && cosechas.length > 0 && <div className="mt-2 grid gap-2 sm:grid-cols-2">{cosechas.map((c, i) => <Caja key={c.id} tarea={`${c.cultivo}${c.variedad ? ` · ${c.variedad}` : ""}${cosechas.length > 1 ? ` · línea ${i + 1}` : ""}`}><input aria-label={`Kilos cosechados ${c.cultivo}`} inputMode="decimal" className="input input-sm" value={c.kg} onChange={ev => setCosechas(actual => actual.map(x => x.id === c.id ? { ...x, kg: ev.target.value } : x))} /></Caja>)}</div>}
+          {!cargandoCosechas && cosechas.length > 0 && <p className="mt-2 text-xs text-stone-600">Se guardan junto con las horas al pulsar «Guardar cambios».</p>}
+        </section>
         <details><summary className="cursor-pointer text-sm font-bold">Observaciones por tarea</summary><div className="mt-2 grid gap-2 sm:grid-cols-2">{entradas.filter(e => e.id || dec(e.horas) > 0).map((e, n) => <Caja key={e.id ?? e.campo} tarea={`${CAMPOS_HORAS[e.campo]?.etiqueta ?? e.original?.tipo_trabajo ?? "Tarea anterior"}${entradas.filter(x => x.campo === e.campo).length > 1 ? ` · línea ${n + 1}` : ""}`}><input aria-label={`Observaciones línea ${n + 1}`} className="input input-sm" maxLength={350} value={e.obs} onChange={ev => cambiar(e, { obs: ev.target.value })} /></Caja>)}</div></details>
-        <p className="text-xs text-stone-600">Esta edición modifica las horas del trabajador. Los kilos de cosecha y el tractor se consultan y corrigen en sus registros propios.</p>
+        <p className="text-xs text-stone-600">El tractor se sigue corrigiendo en su registro propio.</p>
         {(total > MAX_HORAS_DIA || error.includes("12")) && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={forzar} onChange={ev => setForzar(ev.target.checked)} />Guardar igualmente (más de {MAX_HORAS_DIA} h)</label>}
       </fieldset>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
